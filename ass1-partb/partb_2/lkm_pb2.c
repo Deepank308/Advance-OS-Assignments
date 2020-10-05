@@ -27,6 +27,7 @@ enum process_states {
     PROCESS_FILE_CLOSE,
 };
 
+
 // single process
 typedef struct process_state_struct{
     pid_t pid;
@@ -69,8 +70,9 @@ static err_t init_heap_attr(size_t process_idx, struct pb2_set_type_arguments *h
     if(heap_init_param == NULL)
         return -EINVAL;
 
-    if(heap_init_param->heap_size > 0 && heap_init_param->heap_size<=100 
+    if(heap_init_param->heap_size > 0 && heap_init_param->heap_size <= 100 
         && (heap_init_param->heap_type == MIN_HEAP || heap_init_param->heap_type == MAX_HEAP)){
+
         printk(KERN_ALERT "Creating heap %d \n", (int)current->pid);
         return create_heap(&processes->state_list[process_idx].lkm_heap, heap_init_param->heap_type, heap_init_param->heap_size);
     }
@@ -81,31 +83,39 @@ static err_t init_heap_attr(size_t process_idx, struct pb2_set_type_arguments *h
 
 static err_t handle_pb2_set_type(struct pb2_set_type_arguments *heap_init_param, size_t process_idx){
     
+    err_t err = 0;
     if(processes->state_list[process_idx].state > PROCESS_FILE_OPEND &&
         processes->state_list[process_idx].state < PROCESS_FILE_CLOSE ){
         destroy_heap(processes->state_list[process_idx].lkm_heap);
     }
 
-    processes->state_list[process_idx].state = PROCESS_HEAP_INITD;
+    err = init_heap_attr(process_idx, heap_init_param);
 
-    return init_heap_attr(process_idx, heap_init_param);
+    if(!err)
+        processes->state_list[process_idx].state = PROCESS_HEAP_INITD;
+
+    return err;
 }
 
 
 static err_t handle_pb2_insert(int32_t *val, size_t process_idx){
     
+    err_t err = 0;
     if(processes->state_list[process_idx].state < PROCESS_HEAP_INITD)
         return -EACCES;
 
     if(val == NULL)
         return -EINVAL;
     
-    processes->state_list[process_idx].state = PROCESS_HEAP_WRITE;
     printk(KERN_ALERT "Insert heap %d by %d \n", *val, (int)current->pid);
-    if(insert(processes->state_list[process_idx].lkm_heap, *val) == -1)
+    err = insert(processes->state_list[process_idx].lkm_heap, *val);
+
+    if(!err)
+        processes->state_list[process_idx].state = PROCESS_HEAP_WRITE;
+    else
         return -EACCES;
 
-    return 0;
+    return err;
 }
 
 
@@ -118,13 +128,8 @@ static err_t handle_pb2_extract(struct result *heap_extract, size_t process_idx)
         heap_extract = (struct result *)vmalloc(sizeof(result));
     }
 
-    if(extract(processes->state_list[process_idx].lkm_heap, &heap_extract->result) == -1)
-        return -EACCES;
-
     heap_extract->heap_size = processes->state_list[process_idx].lkm_heap->count;  
-    printk(KERN_ALERT "Extracted heap %d by %d \n", heap_extract->result, (int)current->pid);
-    
-    return 0;
+    return extract(processes->state_list[process_idx].lkm_heap, &heap_extract->result);
 }
 
 
@@ -199,6 +204,7 @@ static long file_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
             // handle extract-min/max from heap
             struct result heap_extract;
             err = handle_pb2_extract(&heap_extract, process_idx);
+            // printk(KERN_ALERT "Extract err: %d", err);
             if(!err && copy_to_user((struct result *)arg, &heap_extract, sizeof(heap_extract))){
                 err = -ENOBUFS;
             }
@@ -257,6 +263,10 @@ static err_t file_close(struct inode *inode, struct file *file){
     else
     {
         printk(KERN_ALERT "File close %d\n",(int)current->pid);
+        
+        if(processes->state_list[process_idx].state >= PROCESS_HEAP_INITD)
+        	destroy_heap(processes->state_list[process_idx].lkm_heap);
+        	
         processes->state_list[process_idx].state = PROCESS_FILE_CLOSE;
         processes->state_list[process_idx].pid = -1;
         processes->count--;

@@ -10,7 +10,7 @@ int32_t create_heap(heap** lkm_hp_p, int32_t type, int32_t size)
     hp->capacity=size;
     hp->count=0;
     hp->arr = (int32_t *) vmalloc(size*sizeof(int32_t));
-    hp->last_inserted = -10001;
+    hp->last_inserted = '\0';
     
     *lkm_hp_p = hp;
     
@@ -56,7 +56,10 @@ void pushup(heap* hp, int32_t idx)
 
 
 int32_t get_root(heap *hp, int32_t *top){
-    if(hp->count == 0) return -1;
+    if(hp->count == 0){
+    	*top = '\0';
+    	return 0;
+    }
 
     *top = hp->arr[0];
     return 0;
@@ -80,7 +83,7 @@ int32_t extract(heap* hp, int32_t *top)
 
 int32_t compare(heap* hp, int32_t x, int32_t y)
 {
-    if(hp->type) return x<=y;
+    if(!hp->type) return x<=y;
     else return x>=y;
 }
 
