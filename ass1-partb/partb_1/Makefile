@@ -1,7 +1,7 @@
 HEAP_DECL_PATH := $(PWD)/../heap
 
-obj-m += lkm_meow.o
-lkm_meow-y = lkm_pb1.o ../heap/heap.o
+obj-m += lkm_1.o
+lkm_1-y = lkm_pb1.o ../heap/heap.o
 CFLAGS_lkm_pb1.o := -I$(HEAP_DECL_PATH)/
 
 all:

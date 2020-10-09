@@ -7,7 +7,7 @@
 #include <sys/ioctl.h>
 
 #define RED   "\x1B[31m"
-#define GRN   "\x1B[32m"
+// #define GRN   "\x1B[32m"
 #define RESET "\x1B[0m"
 
 #define PB2_SET_TYPE    _IOW(0x10, 0x31, int32_t*)
@@ -71,28 +71,28 @@ int run_min_heap(char *procfile){
     // Check info
     result = ioctl(fd, PB2_GET_INFO, &myobj_info);
     if(myobj_info.heap_size == 0){
-        printf(GRN "Size Matched\n" RESET);
+        // printf(GRN "Size Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! Size Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_size);
     }
 
     if(myobj_info.heap_type == 0){
-        printf(GRN "Type Matched\n" RESET);
+        // printf(GRN "Type Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! Type Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_type);
     }
 
     if(myobj_info.root == NULL){
-        printf(GRN "ROOT Matched\n" RESET);
+        // printf(GRN "ROOT Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! ROOT Do Not Match. Expected %d, Found %d\n" RESET, (int)NULL, (int)myobj_info.root);
     }
 
     if(myobj_info.last_inserted == NULL){
-        printf(GRN "last_inserted Matched\n" RESET);
+        // printf(GRN "last_inserted Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! last_inserted Do Not Match. Expected %d, Found %d\n" RESET, (int)NULL, (int)myobj_info.last_inserted);
@@ -116,28 +116,28 @@ int run_min_heap(char *procfile){
     // Check info
     result = ioctl(fd, PB2_GET_INFO, &myobj_info);
     if(myobj_info.heap_size == 10){
-        printf(GRN "Size Matched\n" RESET);
+        // printf(GRN "Size Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! Size Do Not Match. Expected %d, Found %d\n" RESET, 10, (int)myobj_info.heap_size);
     }
 
     if(myobj_info.heap_type == 0){
-        printf(GRN "Type Matched\n" RESET);
+        // printf(GRN "Type Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! Type Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_type);
     }
 
     if(myobj_info.root == 2){
-        printf(GRN "ROOT Matched\n" RESET);
+        // printf(GRN "ROOT Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! ROOT Do Not Match. Expected %d, Found %d\n" RESET, (int)2, (int)myobj_info.root);
     }
 
     if(myobj_info.last_inserted == 7){
-        printf(GRN "last_inserted Matched\n" RESET);
+        // printf(GRN "last_inserted Matched\n" RESET);
     }
     else {
         printf(RED "ERROR! last_inserted Do Not Match. Expected %d, Found %d\n" RESET, (int)7, (int)myobj_info.last_inserted);
@@ -155,7 +155,7 @@ int run_min_heap(char *procfile){
         }
         printf("Extracted: %d\n", (int)myresult.result);
         if(myresult.result == minsorted[i]){
-            printf(GRN "Results Matched\n" RESET);
+            // printf(GRN "Results Matched\n" RESET);
         }
         else {
             printf(RED "ERROR! Results Do Not Match. Expected %d, Found %d" RESET, (int)minsorted[i], (int)myresult.result);
@@ -194,28 +194,28 @@ int run_max_heap(char *procfile){
     // Check info
     result = ioctl(fd, PB2_GET_INFO, &myobj_info);
     if(myobj_info.heap_size == 0){
-        printf(GRN "Max Heap Size Matched\n" RESET);
+        // printf(GRN "Max Heap Size Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! Size Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_size);
     }
 
     if(myobj_info.heap_type == 1){
-        printf(GRN "Max Heap Type Matched\n" RESET);
+        // printf(GRN "Max Heap Type Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! Type Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_type);
     }
 
     if(myobj_info.root == NULL){
-        printf(GRN "Max Heap ROOT Matched\n" RESET);
+        // printf(GRN "Max Heap ROOT Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! ROOT Do Not Match. Expected %d, Found %d\n" RESET, (int)NULL, (int)myobj_info.root);
     }
 
     if(myobj_info.last_inserted == NULL){
-        printf(GRN "Max Heap last_inserted Matched\n" RESET);
+        // printf(GRN "Max Heap last_inserted Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! last_inserted Do Not Match. Expected %d, Found %d\n" RESET, (int)NULL, (int)myobj_info.last_inserted);
@@ -239,28 +239,28 @@ int run_max_heap(char *procfile){
     // Check info
     result = ioctl(fd, PB2_GET_INFO, &myobj_info);
     if(myobj_info.heap_size == 10){
-        printf(GRN "Max Heap Size Matched\n" RESET);
+        // printf(GRN "Max Heap Size Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! Size Do Not Match. Expected %d, Found %d\n" RESET, 10, (int)myobj_info.heap_size);
     }
 
     if(myobj_info.heap_type == 1){
-        printf(GRN "Max Heap Type Matched\n" RESET);
+        // printf(GRN "Max Heap Type Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! Type Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_type);
     }
 
     if(myobj_info.root == 15){
-        printf(GRN "Max Heap ROOT Matched\n" RESET);
+        // printf(GRN "Max Heap ROOT Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! ROOT Do Not Match. Expected %d, Found %d\n" RESET, (int)2, (int)myobj_info.root);
     }
 
     if(myobj_info.last_inserted == 7){
-        printf(GRN "Max Heap last_inserted Matched\n" RESET);
+        // printf(GRN "Max Heap last_inserted Matched\n" RESET);
     }
     else {
         printf(RED "Max Heap ERROR! last_inserted Do Not Match. Expected %d, Found %d\n" RESET, (int)7, (int)myobj_info.last_inserted);
@@ -278,7 +278,7 @@ int run_max_heap(char *procfile){
         }
         printf("Max Heap Extracted: %d\n", (int)myresult.result);
         if(myresult.result == maxsorted[i]){
-            printf(GRN "Max Heap Results Matched\n" RESET);
+            // printf(GRN "Max Heap Results Matched\n" RESET);
         }
         else {
             printf(RED "Max Heap ERROR! Results Do Not Match. Expected %d, Found %d\n" RESET, (int)maxsorted[i], (int)myresult.result);
@@ -300,7 +300,7 @@ int main(int argc, char *argv[]){
     strcat(procfile, argv[1]);
 
     int pid = -1;
-	int i = 2;
+	int i = 20;
 	while(i--){
 		if((pid = fork()) == 0){
 			// parent process
@@ -309,12 +309,12 @@ int main(int argc, char *argv[]){
 		else{
 			// childs
 			if(i&1) while(!run_min_heap(procfile));
-			// else while(!run_max_heap(procfile));
+			else while(!run_max_heap(procfile));
 			exit(0);
 		}
 	}
 
-	int n = 10;
+	int n = 20;
 	while(n--){
 		int chpid = wait(NULL);
 		printf("Child Process terminated: %d\n", chpid);
