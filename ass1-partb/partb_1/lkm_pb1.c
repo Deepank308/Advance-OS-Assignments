@@ -80,24 +80,24 @@ static err_t init_heap_attr(size_t process_idx){
     }
     
     hex_type = buffer[0];
-    if(hex_type == MIN_HEAP){
-        heap_type = 0;
+    switch(hex_type){
+        case MIN_HEAP:
+            heap_type = 0;
+            break;
+
+        case MAX_HEAP:
+            heap_type = 1;
+            break;
+
+        default:
+            return -EINVAL;
     }
-    else if(hex_type == MAX_HEAP){
-        heap_type = 1;
-    }
-    else{
-        return -EINVAL;
-    }
-	
+
     heap_size = (unsigned char)buffer[1];
-    // printk(KERN_ALERT "init-heap: %d", (int)heap_size);
-    
     
     if(heap_size < 1 || heap_size > 100){
         return -EINVAL;
     }
-    
     return create_heap(&processes->state_list[process_idx].lkm_heap, heap_type, heap_size);
 }
 
@@ -112,9 +112,7 @@ static ssize_t insert_heap_data(size_t process_idx){
     }
 
     val = *((int32_t *) buffer);
-    
-    // printk(KERN_ALERT "Val: %d", val);
-    
+
     if(insert(processes->state_list[process_idx].lkm_heap, val) == -1) return -EACCES;
     else return buffer_len;
 }
@@ -124,21 +122,23 @@ static ssize_t insert_heap_data(size_t process_idx){
 static ssize_t handle_process_write(size_t process_idx){
 
     int32_t process_state = processes->state_list[process_idx].state;
-    
+    err_t err = 0;
+
     // read the size and type of heap
     if(process_state == PROCESS_FILE_OPEND){
-        
-        processes->state_list[process_idx].state = PROCESS_HEAP_INITD;
-        return init_heap_attr(process_idx);
+        if((err = init_heap_attr(process_idx)) >= 0){
+            processes->state_list[process_idx].state = PROCESS_HEAP_INITD;
+        }
     }
     // read data into the heap
     else if(process_state >= PROCESS_HEAP_INITD){
-
-        processes->state_list[process_idx].state = PROCESS_HEAP_WRITE;
-        return insert_heap_data(process_idx);
+        if((err = insert_heap_data(process_idx)) >= 0){
+            processes->state_list[process_idx].state = PROCESS_HEAP_WRITE;
+        }
     }
+    else err = -EACCES;
 
-    return -EINVAL;
+    return err;
 }
 
 
@@ -224,53 +224,52 @@ static ssize_t file_read(struct file *file, char *buf, size_t count, loff_t *pos
 }
 
 
-// lock leke bhaga!!! Return mat karo biya
 static err_t file_open(struct inode *inode, struct file *file){
+    
+    err_t err = 0;
     
     mutex_lock(&open_close_mutex);
     size_t process_idx = get_idx_from_pid(current->pid);
     
     // cannot be accomodated or already open
     if(process_idx < 0 || processes->state_list[process_idx].state != PROCESS_FILE_CLOSE){
-        return -EMFILE;
+        err = -EMFILE;
     }
-    
-    // Not required, Only for Testing purpose
-    if(processes->state_list[process_idx].pid == current->pid){
-    	return 0;
+    else
+    {
+        printk(KERN_ALERT "------------File open %d\n---------------", (int)current->pid);
+        processes->state_list[process_idx].state = PROCESS_FILE_OPEND;
+        processes->state_list[process_idx].pid = current->pid;
+        processes->count++;
     }
-
-    printk(KERN_ALERT "------------File open %d\n---------------", (int)current->pid);
-    processes->state_list[process_idx].state = PROCESS_FILE_OPEND;
-    processes->state_list[process_idx].pid = current->pid;
-    processes->count++;
-    
     mutex_unlock(&open_close_mutex);
 
-    return 0;
+    return err;
 }
 
 
-// lock leke bhaga!!! Return mat karo biya
 static err_t file_close(struct inode *inode, struct file *file){
 
+    err_t err = 0;
 	mutex_lock(&open_close_mutex);
     size_t process_idx = get_idx_from_pid(current->pid);
     
     // process not found
     if(process_idx < 0 || processes->state_list[process_idx].pid != current->pid){
-        return -ESRCH;
+        err = -ESRCH;
+    }
+    else
+    {
+        printk(KERN_ALERT "------------File close %d\n---------------", (int)current->pid);
+        processes->state_list[process_idx].state = PROCESS_FILE_CLOSE;
+        processes->state_list[process_idx].pid = -1;
+        processes->count--;
+        destroy_heap(processes->state_list[process_idx].lkm_heap);
     }
 
-    printk(KERN_ALERT "------------File close %d\n---------------", (int)current->pid);
-    processes->state_list[process_idx].state = PROCESS_FILE_CLOSE;
-    processes->state_list[process_idx].pid = -1;
-    processes->count--;
-    destroy_heap(processes->state_list[process_idx].lkm_heap);
-    
 	mutex_unlock(&open_close_mutex);
 	
-    return 0;
+    return err;
 }
 
 
