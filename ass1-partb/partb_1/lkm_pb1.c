@@ -259,7 +259,9 @@ static err_t file_open(struct inode *inode, struct file *file){
 static err_t file_close(struct inode *inode, struct file *file){
 
     err_t err = 0;
+
     mutex_lock(&open_close_mutex);
+
     size_t process_idx = get_idx_from_pid(current->pid);
     
     // process not found
@@ -278,8 +280,8 @@ static err_t file_close(struct inode *inode, struct file *file){
         processes->count--;
     }
 
-    mutex_unlock(&open_close_mutex);
-    
+    mutex_unlock(&open_close_mutex);	
+
     return err;
 }
 
