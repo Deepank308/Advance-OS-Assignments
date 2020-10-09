@@ -9,7 +9,6 @@
 #include <ioctl_def.h>
 
 MODULE_LICENSE("GPL");
-// DEFINE_MUTEX(read_write_mutex);
 DEFINE_MUTEX(open_close_mutex);
 
 #define MAX_PROCESS_LIMIT 128
@@ -204,7 +203,6 @@ static long file_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
             // handle extract-min/max from heap
             struct result heap_extract;
             err = handle_pb2_extract(&heap_extract, process_idx);
-            // printk(KERN_ALERT "Extract err: %d", err);
             if(!err && copy_to_user((struct result *)arg, &heap_extract, sizeof(heap_extract))){
                 err = -ENOBUFS;
             }
@@ -225,17 +223,13 @@ static err_t file_open(struct inode *inode, struct file *file){
     mutex_lock(&open_close_mutex);
 
     size_t process_idx = get_idx_from_pid(current->pid);
-    
-    // Not required, Only for Testing purpose
-    // if(processes->state_list[process_idx].pid == current->pid)
-    //  return 0;
 
     // cannot be accomodated or already open
     if(process_idx < 0 || processes->state_list[process_idx].state != PROCESS_FILE_CLOSE)
         err = -EMFILE;
     else
     {
-        printk(KERN_ALERT "File open %d\n",(int)current->pid);
+        printk(KERN_ALERT "File open %d\n", (int) current->pid);
         processes->state_list[process_idx].state = PROCESS_FILE_OPEND;
         processes->state_list[process_idx].pid = current->pid;
         processes->count++;
@@ -262,7 +256,7 @@ static err_t file_close(struct inode *inode, struct file *file){
         err = -ESRCH;
     else
     {
-        printk(KERN_ALERT "File close %d\n",(int)current->pid);
+        printk(KERN_ALERT "File close %d\n", (int)current->pid);
         
         if(processes->state_list[process_idx].state >= PROCESS_HEAP_INITD)
         	destroy_heap(processes->state_list[process_idx].lkm_heap);

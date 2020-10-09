@@ -6,7 +6,7 @@
 
 typedef struct heap
 {
-    int32_t type; // Max 0, Min 1
+    int32_t type; // Max 1, Min 0
     int32_t capacity; 
     int32_t count;
     int32_t *arr;

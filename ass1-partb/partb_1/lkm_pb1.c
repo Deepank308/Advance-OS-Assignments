@@ -8,7 +8,7 @@
 
 
 MODULE_LICENSE("GPL");
-DEFINE_MUTEX(read_write_mutex);
+DEFINE_MUTEX(read_write_mutex); 
 DEFINE_MUTEX(open_close_mutex);
 
 #define MAX_PROCESS_LIMIT 128
@@ -81,10 +81,10 @@ static err_t init_heap_attr(size_t process_idx){
     
     hex_type = buffer[0];
     if(hex_type == MIN_HEAP){
-        heap_type = 1;
+        heap_type = 0;
     }
     else if(hex_type == MAX_HEAP){
-        heap_type = 0;
+        heap_type = 1;
     }
     else{
         return -EINVAL;
