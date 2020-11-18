@@ -113,17 +113,17 @@ int mount(disk *diskptr)
 
 void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx)
 {
-    int bmap_block_idx = bit_position / (8*BLOCKSIZE);
+    int bmap_block_idx = bit_position / (8 * BLOCKSIZE);
     int bit_offset = bit_position % (BLOCKSIZE * 8);
 
-    read_block(fs.diskptr, offset_block_idx+bmap_block_idx,fs.rblock);
+    read_block(fs.diskptr, offset_block_idx + bmap_block_idx, fs.rblock);
 
     int *bmap_block = (uint32_t *)fs.rblock;
     int update_idx = bit_offset / 32;
     int bit = (31 - update_idx) % 32;
     bmap_block[update_idx] ^= (1 << bit);
-    bmap[bit_position/32] ^= (1 << (31-(bit_position%32)));
-    
+    bmap[bit_position / 32] ^= (1 << (31 - (bit_position % 32)));
+
     write_block(fs.diskptr, offset_block_idx + bmap_block_idx, bmap_block);
 }
 
@@ -154,16 +154,18 @@ int get_free_bmap_idx(uint32_t *bmap, uint32_t len_bmap, uint32_t bmap_offset)
         return ERR;
 
     // update bitmap
-    flip_bit_in_bmap(idx,bmap_offset);
+    flip_bit_in_bmap(idx, bmap_offset);
 
     return idx;
 }
 
-int get_inode_from_disk(int inode_idx, int *inode_block_idx, int *inode_num){
+int get_inode_from_disk(int inode_idx, int *inode_block_idx, int *inode_num)
+{
     *inode_block_idx = inode_idx / INODE_PER_BLOCK;
     *inode_num = inode_idx % INODE_PER_BLOCK;
 
-    if (read_block(fs.diskptr, fs.sb.inode_block_idx + *inode_block_idx, fs.rblock) == ERR){
+    if (read_block(fs.diskptr, fs.sb.inode_block_idx + *inode_block_idx, fs.rblock) == ERR)
+    {
         return ERR;
     }
 
@@ -178,7 +180,8 @@ int create_file()
 
     // update inode block
     int inode_block_idx, inode_num;
-    if(get_inode_from_disk(inode_idx, &inode_block_idx, &inode_num) == ERR){
+    if (get_inode_from_disk(inode_idx, &inode_block_idx, &inode_num) == ERR)
+    {
         return ERR;
     }
 
@@ -192,11 +195,12 @@ int create_file()
         return ERR;
 }
 
-bool check_valid_inode(int inumber){
-    if(inumber < 0 || inumber > fs.sb.inodes)
+bool check_valid_inode(int inumber)
+{
+    if (inumber < 0 || inumber > fs.sb.inodes)
         return INVALID;
 
-    return VALID; 
+    return VALID;
 }
 
 int remove_file(int inumber)
@@ -206,49 +210,56 @@ int remove_file(int inumber)
 
     // set inode.valid=0
     int inode_block_idx, inode_num;
-    if(get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR){
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
         return ERR;
     }
 
     inode in = ((inode *)fs.rblock)[inode_num];
-    if(in.valid == INVALID){
+    if (in.valid == INVALID)
+    {
         return ERR;
     }
-    
+
     ((inode *)fs.rblock)[inode_num].valid = INVALID;
-    write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx,fs.rblock);
- 
+    write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock);
+
     // update inode bmaps
     flip_bit_in_bmap(fs.inode_bmap, inumber, fs.sb.inode_bitmap_block_idx);
-    
+
     // update data bmaps
     uint32_t cur_dblock = 0, num_dblocks = ceil(in.size / BLOCKSIZE);
     uint32_t indirect_ptrs[PTRS_PER_BLOCK];
 
     bool indirect_ptrs_fetched = 0;
-    while(cur_dblock < num_dblocks){
+    while (cur_dblock < num_dblocks)
+    {
         uint32_t dblock = -1;
-        
+
         // direct pointers
-        if(cur_dblock < 5){
+        if (cur_dblock < 5)
+        {
             dblock = in.direct[cur_dblock];
         }
         // in-direct pointer
-        else if(cur_dblock < (5 + PTRS_PER_BLOCK)){
-            if(!indirect_ptrs_fetched){
+        else if (cur_dblock < (5 + PTRS_PER_BLOCK))
+        {
+            if (!indirect_ptrs_fetched)
+            {
                 indirect_ptrs_fetched = 1;
                 read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs);
-                
-                // remove the indirect block 
+
+                // remove the indirect block
                 flip_bit_in_bmap(fs.data_bmap, in.indirect, fs.sb.data_block_bitmap_idx);
             }
             dblock = indirect_ptrs[cur_dblock - 5];
         }
-        else{
+        else
+        {
             // out of range
             return ERR;
         }
-        
+
         flip_bit_in_bmap(fs.data_bmap, dblock, fs.sb.data_block_bitmap_idx);
         cur_dblock++;
     }
@@ -256,8 +267,201 @@ int remove_file(int inumber)
     return SUCC;
 }
 
-
 int stat(int inumber)
 {
-    
+    if (check_valid_inode(inumber) == INVALID)
+        return ERR;
+
+    int inode_block_idx, inode_num;
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
+        return ERR;
+    }
+
+    inode in = ((inode *)fs.rblock)[inode_num];
+    if (in.valid == INVALID)
+    {
+        return ERR;
+    }
+
+    int num_dblocks = ceil(in.size / BLOCKSIZE);
+    int direct_ptrs = (num_dblocks > 5) ? 5 : num_dblocks;
+    int indirect_ptrs = (num_dblocks > 5) ? num_dblocks - 5 : 0;
+
+    printf("\ninode %d stats:\n", inumber);
+    printf("Logical size: %d\n", in.size);
+    printf("Number of data blocks in use: %d\n", num_dblocks);
+    printf("Number of direct pointers used: %d\n", direct_ptrs);
+    printf("Number of indirect pointers used: %d\n", indirect_ptrs);
+
+    return SUCC;
+}
+
+bool check_valid_offset(int offset, int size)
+{
+    if (offset < 0 || offset >= size)
+        return INVALID;
+
+    return VALID;
+}
+
+uint32_t min(uint32_t a, uint32_t b)
+{
+    if (a < b)
+        return a;
+    return b;
+}
+
+int read_i(int inumber, char *data, int length, int offset)
+{
+    if (check_valid_inode(inumber) == INVALID)
+        return ERR;
+
+    int inode_block_idx, inode_num;
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
+        return ERR;
+    }
+
+    inode in = ((inode *)fs.rblock)[inode_num];
+    if (in.valid == INVALID)
+    {
+        return ERR;
+    }
+
+    if (check_valid_offset(offset, in.size) == INVALID)
+    {
+        return ERR;
+    }
+
+    length += offset;
+    if (length > in.size)
+        length = in.size;
+
+    uint32_t cur_dblock = offset / BLOCKSIZE, num_dblocks = ceil(length / BLOCKSIZE);
+    uint32_t indirect_ptrs[PTRS_PER_BLOCK];
+    bool indirect_ptrs_fetched = 0, start = 1;
+
+    uint32_t data_offset = -1;
+    while (cur_dblock < num_dblocks)
+    {
+        uint32_t dblock = -1;
+
+        // direct pointers
+        if (cur_dblock < 5)
+        {
+            dblock = in.direct[cur_dblock];
+        }
+        // in-direct pointer
+        else if (cur_dblock < (5 + PTRS_PER_BLOCK))
+        {
+            if (!indirect_ptrs_fetched)
+            {
+                indirect_ptrs_fetched = 1;
+                read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs);
+            }
+            dblock = indirect_ptrs[cur_dblock - 5];
+        }
+        else
+        {
+            // out of range
+            return ERR;
+        }
+
+        char data_block[BLOCKSIZE];
+        read_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block);
+
+        if (data_offset == -1)
+        {
+            data_offset = min((cur_dblock + 1) * BLOCKSIZE, length) - offset;
+            strncpy(data, data_block + (offset - cur_dblock * BLOCKSIZE), data_offset);
+        }
+        else
+        {
+            uint32_t copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
+            strncpy(data + data_offset, data_block, copy_len);
+            data_offset += copy_len;
+        }
+
+        cur_dblock++;
+    }
+
+    return data_offset;
+}
+
+int write_i(int inumber, char *data, int length, int offset)
+{
+    if (check_valid_inode(inumber) == INVALID)
+        return ERR;
+
+    int inode_block_idx, inode_num;
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
+        return ERR;
+    }
+
+    inode in = ((inode *)fs.rblock)[inode_num];
+    if (in.valid == INVALID)
+    {
+        return ERR;
+    }
+
+    if (check_valid_offset(offset, in.size) == INVALID)
+    {
+        return ERR;
+    }
+
+    length += offset;
+    if (length > in.size)
+        length = in.size;
+
+    uint32_t cur_dblock = offset / BLOCKSIZE, num_dblocks = ceil(length / BLOCKSIZE);
+    uint32_t indirect_ptrs[PTRS_PER_BLOCK];
+    bool indirect_ptrs_fetched = 0, start = 1;
+
+    uint32_t data_offset = -1;
+    while (cur_dblock < num_dblocks)
+    {
+        uint32_t dblock = -1;
+
+        // direct pointers
+        if (cur_dblock < 5)
+        {
+            dblock = in.direct[cur_dblock];
+        }
+        // in-direct pointer
+        else if (cur_dblock < (5 + PTRS_PER_BLOCK))
+        {
+            if (!indirect_ptrs_fetched)
+            {
+                indirect_ptrs_fetched = 1;
+                read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs);
+            }
+            dblock = indirect_ptrs[cur_dblock - 5];
+        }
+        else
+        {
+            // out of range
+            return ERR;
+        }
+
+        char data_block[BLOCKSIZE];
+        read_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block);
+
+        if (data_offset == -1)
+        {
+            data_offset = min((cur_dblock + 1) * BLOCKSIZE, length) - offset;
+            strncpy(data, data_block + (offset - cur_dblock * BLOCKSIZE), data_offset);
+        }
+        else
+        {
+            uint32_t copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
+            strncpy(data + data_offset, data_block, copy_len);
+            data_offset += copy_len;
+        }
+
+        cur_dblock++;
+    }
+
+    return SUCC;
 }
