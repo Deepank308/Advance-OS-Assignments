@@ -1,4 +1,9 @@
 #include<stdint.h>
+#include<stdbool.h>
+#include<stdio.h>
+
+#define ERR -1
+#define SUCC 0
 
 const static int BLOCKSIZE = 4*1024;
 
@@ -18,3 +23,4 @@ int read_block(disk *diskptr, int blocknr, void *block_data);
 int write_block(disk *diskptr, int blocknr, void *block_data);
 
 int free_disk(disk *diskptr);
+ 
