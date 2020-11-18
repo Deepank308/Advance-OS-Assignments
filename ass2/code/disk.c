@@ -2,14 +2,18 @@
 
 bool check_valid_blockptr(disk *diskptr, int blocknr){
     if(diskptr == NULL){
-        return ERR;
+        return INVALID;
     }
 
-    return (blocknr >= 0 && blocknr < diskptr->blocks) == SUCC;
+    if((blocknr < 0 || blocknr >= diskptr->blocks)){
+        return INVALID;
+    }
+    
+    return VALID;
 }
 
 int read_block(disk *diskptr, int blocknr, void *block_data){
-    if(check_valid_blockptr(diskptr, blocknr) == ERR){
+    if(check_valid_blockptr(diskptr, blocknr) == INVALID){
         return ERR;
     }
 
