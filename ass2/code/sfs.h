@@ -1,7 +1,8 @@
-#include<stdio.h>
-#include<stdint.h>
 #include<math.h>
+#include<stdio.h>
 #include<stdlib.h>
+#include<stdint.h>
+#include<string.h>
 
 const static uint32_t MAGIC = 12345;
 
