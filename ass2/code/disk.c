@@ -28,8 +28,13 @@ disk *create_disk(int nbytes)
     diskptr->size = nbytes;
     diskptr->reads = 0;
     diskptr->writes = 0;
+
     diskptr->blocks = rembytes / BLOCKSIZE;
-    diskptr->block_arr = (char **)malloc(diskptr->blocks * BLOCKSIZE);
+    diskptr->block_arr = (char **)malloc(diskptr->blocks * sizeof(char *));
+    for (int i = 0; i < diskptr->blocks; i++)
+    {
+        diskptr->block_arr[i] = (char *)malloc(BLOCKSIZE);
+    }
 
     if (diskptr->block_arr == NULL) // malloc unsuccessful
         return NULL;
@@ -67,6 +72,11 @@ int free_disk(disk *diskptr)
 {
     if (diskptr == NULL)
         return SUCC;
+
+    for (int i = 0; i < diskptr->blocks; i++)
+    {
+        free(diskptr->block_arr[i]);
+    }
 
     free(diskptr->block_arr);
     free(diskptr);

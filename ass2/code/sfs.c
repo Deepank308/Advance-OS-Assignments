@@ -1,10 +1,6 @@
 #include "disk.h"
 #include "sfs.h"
 
-#define BITS_PER_BYTES 8
-#define PTRS_PER_BLOCK BLOCKSIZE / 4    // 1024
-#define INODE_PER_BLOCK BLOCKSIZE / 32  // 128
-
 static uint32_t ceil(uint32_t a, uint32_t b)
 {
     return (a + b - 1) / b;
@@ -22,6 +18,14 @@ static uint32_t max(uint32_t a, uint32_t b)
     if (a > b)
         return a;
     return b;
+}
+
+bool check_valid_inode(int inumber)
+{
+    if (inumber < 0 || inumber > fs.sb.inodes)
+        return INVALID;
+
+    return VALID;
 }
 
 int format(disk *diskptr)
@@ -68,9 +72,11 @@ int format(disk *diskptr)
     {
         if (write_block(diskptr, i, ptr_zero) == ERR)
         {
+            free(ptr_zero);
             return ERR;
         }
     }
+    free(ptr_zero);
 
     // initialize inodes
     inode *inodes_array = (inode *)malloc(INODE_PER_BLOCK * sizeof(inode));
@@ -83,9 +89,11 @@ int format(disk *diskptr)
     {
         if (write_block(diskptr, i, inodes_array) == ERR)
         {
+            free(inodes_array);
             return ERR;
         }
     }
+    free(inodes_array);
 
     return SUCC;
 }
@@ -106,20 +114,27 @@ void init_mounted_fs(super_block *sb, disk *diskptr)
     memset(fs.data_bmap, 0, fs.len_data_bmap * sizeof(uint32_t));
 
     fs.rblock = malloc(BLOCKSIZE);
+    fs.root_dir = (dir_entry *)malloc(sizeof(dir_entry));
+    *(fs.root_dir) = (dir_entry){.valid = VALID, .type = DIR, .name = "/", .name_len = 1, .inumber = 0};
+    get_free_bmap_idx(fs.inode_bmap, fs.len_inode_bmap, fs.sb.inode_bitmap_block_idx);
 }
 
-int mount(disk *diskptr){
+int mount(disk *diskptr)
+{
     // already mounted
-    if (diskptr == NULL || fs.diskptr != NULL){
-        return ERR;
-    }
-    
-    super_block sb;
-    if (read_block(diskptr, 0, &sb) == ERR){
+    if (diskptr == NULL || fs.diskptr != NULL)
+    {
         return ERR;
     }
 
-    if (sb.magic_number != MAGIC){
+    super_block sb;
+    if (read_block(diskptr, 0, &sb) == ERR)
+    {
+        return ERR;
+    }
+
+    if (sb.magic_number != MAGIC)
+    {
         return ERR;
     }
 
@@ -127,7 +142,8 @@ int mount(disk *diskptr){
     return SUCC;
 }
 
-void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx){
+void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx)
+{
     int bmap_block_idx = bit_position / (8 * BLOCKSIZE);
     int bit_offset = bit_position % (BLOCKSIZE * 8);
 
@@ -143,20 +159,25 @@ void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_blo
     write_block(fs.diskptr, offset_block_idx + bmap_block_idx, bmap_block);
 }
 
-int get_free_bmap_idx(uint32_t *bmap, uint32_t len_bmap, uint32_t bmap_offset){
+int get_free_bmap_idx(uint32_t *bmap, uint32_t len_bmap, uint32_t bmap_offset)
+{
     int idx = -1; // 0 based idx of the required bit from start of bmap
-    for (int i = 0; i < len_bmap; i++){
+    for (int i = 0; i < len_bmap; i++)
+    {
         int mask = bmap[i];
         int bit;
-        for (bit = 31; bit >= 0; bit--){
-            if (!(mask & (1 << bit))){
+        for (bit = 31; bit >= 0; bit--)
+        {
+            if (!(mask & (1 << bit)))
+            {
                 // free bit
                 // updates in flip_bit_in_bmap
                 // bmap[i] |= (1 << bit);
                 break;
             }
         }
-        if (bit != -1){
+        if (bit != -1)
+        {
             idx = i * 32 + (32 - bit) - 1;
             break;
         }
@@ -205,14 +226,8 @@ int create_file()
 
     if (write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock) == ERR) // writing back updates block into disk
         return ERR;
-}
 
-bool check_valid_inode(int inumber)
-{
-    if (inumber < 0 || inumber > fs.sb.inodes)
-        return INVALID;
-
-    return VALID;
+    return inode_idx;
 }
 
 int remove_file(int inumber)
@@ -234,7 +249,8 @@ int remove_file(int inumber)
     }
 
     ((inode *)fs.rblock)[inode_num].valid = INVALID;
-    if(write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock) == ERR){
+    if (write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock) == ERR)
+    {
         return ERR;
     }
 
@@ -261,7 +277,8 @@ int remove_file(int inumber)
             if (!indirect_ptrs_fetched)
             {
                 indirect_ptrs_fetched = 1;
-                if(read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR){
+                if (read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR)
+                {
                     return ERR;
                 }
 
@@ -283,17 +300,20 @@ int remove_file(int inumber)
     return SUCC;
 }
 
-int stat(int inumber){
+int stat(int inumber)
+{
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
     int inode_block_idx, inode_num;
-    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR){
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
         return ERR;
     }
 
     inode in = ((inode *)fs.rblock)[inode_num];
-    if (in.valid == INVALID){
+    if (in.valid == INVALID)
+    {
         return ERR;
     }
 
@@ -310,21 +330,25 @@ int stat(int inumber){
     return SUCC;
 }
 
-int read_i(int inumber, char *data, int length, int offset){
+int read_i(int inumber, char *data, int length, int offset)
+{
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
     int inode_block_idx, inode_num;
-    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR){
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
         return ERR;
     }
 
     inode in = ((inode *)fs.rblock)[inode_num];
-    if (in.valid == INVALID){
+    if (in.valid == INVALID)
+    {
         return ERR;
     }
 
-    if (offset < 0 || offset >= in.size){
+    if (offset < 0 || offset >= in.size)
+    {
         return ERR;
     }
 
@@ -335,38 +359,47 @@ int read_i(int inumber, char *data, int length, int offset){
     bool indirect_ptrs_fetched = 0;
 
     uint32_t data_offset = -1;
-    while (cur_dblock < num_dblocks){
+    while (cur_dblock < num_dblocks)
+    {
         uint32_t dblock = -1;
 
         // direct pointers
-        if (cur_dblock < 5){
+        if (cur_dblock < 5)
+        {
             dblock = in.direct[cur_dblock];
         }
         // in-direct pointer
-        else if (cur_dblock < (5 + PTRS_PER_BLOCK)){
-            if (!indirect_ptrs_fetched){
+        else if (cur_dblock < (5 + PTRS_PER_BLOCK))
+        {
+            if (!indirect_ptrs_fetched)
+            {
                 indirect_ptrs_fetched = 1;
-                if(read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR){
+                if (read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR)
+                {
                     return ERR;
                 }
             }
             dblock = indirect_ptrs[cur_dblock - 5];
         }
-        else{
+        else
+        {
             // out of range, dead zone x_x
             return ERR;
         }
 
         char data_block[BLOCKSIZE];
-        if(read_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block) == ERR){
+        if (read_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block) == ERR)
+        {
             return ERR;
         }
 
-        if (data_offset == -1){
+        if (data_offset == -1)
+        {
             data_offset = min((cur_dblock + 1) * BLOCKSIZE, length) - offset;
             strncpy(data, data_block + (offset - cur_dblock * BLOCKSIZE), data_offset);
         }
-        else{
+        else
+        {
             uint32_t copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
             strncpy(data + data_offset, data_block, copy_len);
             data_offset += copy_len;
@@ -378,21 +411,25 @@ int read_i(int inumber, char *data, int length, int offset){
     return data_offset;
 }
 
-int write_i(int inumber, char *data, int length, int offset){
+int write_i(int inumber, char *data, int length, int offset)
+{
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
     int inode_block_idx, inode_num;
-    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR){
+    if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR)
+    {
         return ERR;
     }
 
     inode in = ((inode *)fs.rblock)[inode_num];
-    if (in.valid == INVALID){
+    if (in.valid == INVALID)
+    {
         return ERR;
     }
 
-    if (offset < 0 || offset > in.size){
+    if (offset < 0 || offset > in.size)
+    {
         return ERR;
     }
 
@@ -406,17 +443,23 @@ int write_i(int inumber, char *data, int length, int offset){
 
     bool indirect_ptrs_def = 0;
     uint32_t file_dblocks = ceil(in.size, BLOCKSIZE); // number of dblocks pointers already in inode
-    while (cur_dblock < num_dblocks){
+    while (cur_dblock < num_dblocks)
+    {
         uint32_t dblock = -1;
         // overwrite
-        if (cur_dblock < file_dblocks){
-            if (cur_dblock < 5){
+        if (cur_dblock < file_dblocks)
+        {
+            if (cur_dblock < 5)
+            {
                 dblock = in.direct[cur_dblock];
             }
-            else if (cur_dblock < (5 + PTRS_PER_BLOCK)){
-                if (!indirect_ptrs_fetched){
+            else if (cur_dblock < (5 + PTRS_PER_BLOCK))
+            {
+                if (!indirect_ptrs_fetched)
+                {
                     indirect_ptrs_fetched = 1;
-                    if(read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR){
+                    if (read_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR)
+                    {
                         return ERR;
                     }
                 }
@@ -424,18 +467,24 @@ int write_i(int inumber, char *data, int length, int offset){
             }
         }
         // append
-        else if (cur_dblock >= file_dblocks){
+        else if (cur_dblock >= file_dblocks)
+        {
             // no data block empty, disk full
-            if ((dblock = get_free_bmap_idx(fs.data_bmap, fs.len_data_bmap, fs.sb.data_block_bitmap_idx)) == ERR){
+            if ((dblock = get_free_bmap_idx(fs.data_bmap, fs.len_data_bmap, fs.sb.data_block_bitmap_idx)) == ERR)
+            {
                 break;
             }
-            else if (cur_dblock < 5){
+            else if (cur_dblock < 5)
+            {
                 in.direct[cur_dblock] = dblock;
             }
-            else if (cur_dblock < (5 + PTRS_PER_BLOCK)){
-                if (cur_dblock == 5){
+            else if (cur_dblock < (5 + PTRS_PER_BLOCK))
+            {
+                if (cur_dblock == 5)
+                {
                     // allocate indirect pointers data block
-                    if ((in.indirect = get_free_bmap_idx(fs.data_bmap, fs.len_data_bmap, fs.sb.data_block_bitmap_idx)) == ERR){
+                    if ((in.indirect = get_free_bmap_idx(fs.data_bmap, fs.len_data_bmap, fs.sb.data_block_bitmap_idx)) == ERR)
+                    {
                         break;
                     }
                 }
@@ -443,31 +492,36 @@ int write_i(int inumber, char *data, int length, int offset){
                 indirect_ptrs[cur_dblock - 5] = dblock;
             }
             // exceeds maximum file size
-            else{
+            else
+            {
                 break;
             }
         }
 
         // read the data block(needed when appending)
         char data_block[BLOCKSIZE];
-        if(read_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block) == ERR){
+        if (read_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block) == ERR)
+        {
             return ERR;
         }
 
         // first block(writing suffix)
-        if (data_offset == -1){
+        if (data_offset == -1)
+        {
             data_offset = min((cur_dblock + 1) * BLOCKSIZE, length) - offset;
             strncpy(data_block + (offset - cur_dblock * BLOCKSIZE), data, data_offset);
         }
         // other blocks(writing prefix)
-        else{
+        else
+        {
             uint32_t copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
             strncpy(data_block, data + data_offset, copy_len);
             data_offset += copy_len;
         }
 
         // write the data block
-        if(write_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block) == ERR){
+        if (write_block(fs.diskptr, dblock + fs.sb.data_block_idx, data_block) == ERR)
+        {
             return ERR;
         }
         cur_dblock++;
@@ -477,15 +531,287 @@ int write_i(int inumber, char *data, int length, int offset){
     in.size = in.size + max(length - in.size, 0);
 
     // if indirect pointers created
-    if (indirect_ptrs_def  
-        && write_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR){
+    if (indirect_ptrs_def && write_block(fs.diskptr, in.indirect + fs.sb.data_block_idx, indirect_ptrs) == ERR)
+    {
         return ERR;
     }
 
     // update inode block
     ((inode *)(fs.rblock))[inode_num] = in;
-    if(write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock) == ERR){
+    if (write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock) == ERR)
+    {
         return ERR;
     }
     return data_offset;
+}
+
+// format ---> /a/b/cat.meow
+char **parse_path(char *path, int *size)
+{
+    char **names;
+    char *token;
+    token = strtok(path, "/");
+    while (token != NULL)
+    {
+        names[*size] = (char *)malloc(strlen(token) * sizeof(char));
+        strcpy(names[(*size)++], token);
+        token = strtok(NULL, "/");
+    }
+    return names;
+}
+
+dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
+{
+    uint32_t inode_block_idx, inode_num;
+    get_inode_from_disk(dir_inode, &inode_block_idx, &inode_num);
+
+    inode in = ((inode *)fs.rblock)[inode_num];
+    if (in.valid == INVALID)
+    {
+        return ERR;
+    }
+
+    *num_dir_entry = in.size / sizeof(dir_entry);
+    dir_entry *dir_entries = (dir_entry *)malloc((*num_dir_entry) * sizeof(dir_entry));
+    read_i(dir_inode, dir_entries, in.size, 0);
+
+    return dir_entries;
+}
+
+// return inumber of the next_dir
+uint32_t walk_utils(uint32_t cur_dir_inode, char *next_dir)
+{
+    uint32_t num_dir_entry;
+    dir_entry *dir_entries = get_dirblock(cur_dir_inode, &num_dir_entry);
+
+    int i;
+    for (i = 0; i < num_dir_entry; i++)
+    {
+        if (strcmp(dir_entries[i].name, next_dir) == 0)
+            break;
+    }
+    if (i == num_dir_entry)
+    {
+        //dir not found
+        free(dir_entries);
+        return ERR;
+    }
+    uint32_t inum = dir_entries[i].inumber;
+
+    free(dir_entries);
+    return inum;
+}
+
+uint32_t get_parent_inode(char *path, char **base_name)
+{
+    uint32_t len_dir_names = 0;
+    char **dir_names = parse_path(path, &len_dir_names);
+
+    if (len_dir_names == 0)
+    {
+        return ERR;
+    }
+
+    *base_name = dir_names[len_dir_names - 1];
+
+    int cur_dir_inode = 0; //root_inode
+    for (int i = 0; i < len_dir_names - 1; i++)
+    {
+        if ((cur_dir_inode = walk_utils(cur_dir_inode, dir_names[i])) == ERR)
+        {
+            return ERR;
+        }
+    }
+
+    for (int i = 0; i < len_dir_names; i++)
+        free(dir_names[i]);
+
+    return cur_dir_inode;
+}
+
+int create_dir(char *dir_path)
+{
+    struct dir_entry new_dir;
+
+    char *base_name;
+    uint32_t parent_inode;
+    if ((parent_inode = get_parent_inode(dir_path, &base_name)) == ERR)
+    {
+        return ERR;
+    }
+
+    new_dir.valid = VALID;
+    new_dir.type = DIR;
+    strcpy(new_dir.name, base_name);
+    new_dir.name_len = strlen(base_name);
+
+    // dir already exists!
+    if (walk_utils(parent_inode, base_name) != ERR)
+    {
+        return ERR;
+    }
+
+    if ((new_dir.inumber = create_file()) == ERR)
+    {
+        return ERR;
+    }
+
+    // parent file size
+    uint32_t num_dir_entry;
+    dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+    int i;
+    for (i = 0; i < num_dir_entry; i++)
+    {
+        if (dir_entries[i].valid == INVALID)
+        {
+            break;
+        }
+    }
+    free(dir_entries);
+
+    // write new dir entry at parent DB
+    uint32_t write_offset = i * (sizeof(dir_entry));
+    if (write_i(parent_inode, &new_dir, sizeof(new_dir), write_offset) == ERR)
+    {
+        return ERR;
+    }
+
+    return SUCC;
+}
+
+int remove_dir_utils(uint32_t parent_inode)
+{
+    uint32_t num_dir_entry;
+    dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+
+    for (int i = 0; i < num_dir_entry; i++)
+    {
+        if (dir_entries[i].type == DIR)
+        {
+            remove_dir_utils(dir_entries[i].inumber);
+        }
+        remove_file(dir_entries[i].inumber);
+        dir_entries[i].valid = INVALID;
+    }
+
+    free(dir_entries);
+    return SUCC;
+}
+
+int remove_dir(char *dir_path)
+{
+    char *base_name;
+    uint32_t parent_inode = get_parent_inode(dir_path, &base_name);
+
+    // get parent directory list
+    // parent file size
+    uint32_t num_dir_entry;
+    dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+
+    int i;
+    for (i = 0; i < num_dir_entry; i++)
+    {
+        if (strcmp(dir_entries[i].name, base_name) == 0)
+        {
+            remove_dir_utils(dir_entries[i].inumber);
+            remove_file(dir_entries[i].inumber);
+            dir_entries[i].valid = INVALID;
+            break;
+        }
+    }
+    if (i == num_dir_entry)
+    {
+        free(dir_entries);
+        return ERR;
+    }
+
+    write_i(parent_inode, dir_entries, sizeof(dir_entries), 0);
+
+    free(dir_entries);
+    return SUCC;
+}
+
+int read_file(char *filepath, char *data, int length, int offset)
+{
+    char *base_name;
+    uint32_t parent_inode = get_parent_inode(filepath, &base_name);
+
+    uint32_t num_dir_entry;
+    dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+
+    uint32_t inumber = -1;
+    for (int i = 0; i < num_dir_entry; i++)
+    {
+        if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == FILE)
+        {
+            inumber = dir_entries[i].inumber;
+            break;
+        }
+    }
+    free(dir_entries);
+
+    if (inumber == -1 || check_valid_inode(inumber) == INVALID)
+    {
+        return ERR;
+    }
+
+    return read_i(inumber, data, length, offset);
+}
+
+int write_file(char *filepath, char *data, int length, int offset)
+{
+    char *base_name;
+    uint32_t parent_inode = get_parent_inode(filepath, &base_name);
+
+    uint32_t num_dir_entry;
+    dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+
+    uint32_t inumber = -1;
+    for (int i = 0; i < num_dir_entry; i++)
+    {
+        if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == FILE)
+        {
+            inumber = dir_entries[i].inumber;
+            break;
+        }
+    }
+
+    // create new file
+    if (inumber == -1)
+    {
+        if ((inumber = create_file()) == ERR)
+        {
+            free(dir_entries);
+            return ERR;
+        }
+
+        // update parent dir
+        int i;
+        for (i = 0; i < num_dir_entry; i++)
+        {
+            if (dir_entries[i].valid == INVALID)
+            {
+                break;
+            }
+        }
+        dir_entry new_file = (dir_entry){.valid = VALID, .type = FILE, .inumber = inumber};
+        strcpy(new_file.name, base_name);
+        new_file.name_len = strlen(base_name);
+
+        // write new file at parent DB
+        uint32_t write_offset = i * (sizeof(dir_entry));
+        if (write_i(parent_inode, &new_file, sizeof(new_file), write_offset) == ERR)
+        {
+            free(dir_entries);
+            return ERR;
+        }
+    }
+    else if (check_valid_inode(inumber) == INVALID)
+    {
+        free(dir_entries);
+        return ERR;
+    }
+
+    free(dir_entries);
+    return write_i(inumber, data, length, offset);
 }

@@ -4,6 +4,14 @@
 #include<stdint.h>
 #include<string.h>
 
+#define DIR 0
+#define FILE 1
+#define BITS_PER_BYTES 8
+#define PTRS_PER_BLOCK BLOCKSIZE / 4    // 1024
+#define INODE_PER_BLOCK BLOCKSIZE / 32  // 128
+#define MAX_FILE PTRS_PER_BLOCK * 128
+#define MAX_FILENAME_LEN 22
+
 const static uint32_t MAGIC = 12345;
 
 typedef struct inode {
@@ -12,6 +20,16 @@ typedef struct inode {
 	uint32_t direct[5]; // direct data block pointer
 	uint32_t indirect; // indirect pointer
 } inode;
+
+
+typedef struct dir_entry {
+	unsigned int valid : 1;
+	unsigned int type : 1;		
+	char name[MAX_FILENAME_LEN];
+	uint32_t name_len;
+	uint32_t inumber;
+} dir_entry;
+
 
 typedef struct super_block {
 	uint32_t magic_number;	// File system magic number
@@ -38,8 +56,10 @@ typedef struct mounted_fs {
 	uint32_t len_inode_bmap;
 	uint32_t len_data_bmap;
 
-	disk* diskptr; 
+	disk* diskptr;
+	dir_entry* root_dir;
 } mounted_fs;
+
 
 static mounted_fs fs = {.diskptr = NULL};
 
@@ -63,3 +83,4 @@ int read_file(char *filepath, char *data, int length, int offset);
 int write_file(char *filepath, char *data, int length, int offset);
 int create_dir(char *dirpath);
 int remove_dir(char *dirpath);
+ 
