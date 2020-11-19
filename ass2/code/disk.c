@@ -31,13 +31,16 @@ disk *create_disk(int nbytes)
 
     diskptr->blocks = rembytes / BLOCKSIZE;
     diskptr->block_arr = (char **)malloc(diskptr->blocks * sizeof(char *));
-    for (int i = 0; i < diskptr->blocks; i++)
-    {
-        diskptr->block_arr[i] = (char *)malloc(BLOCKSIZE);
-    }
 
     if (diskptr->block_arr == NULL) // malloc unsuccessful
         return NULL;
+
+    for (int i = 0; i < diskptr->blocks; i++)
+    {
+        diskptr->block_arr[i] = (char *)malloc(BLOCKSIZE);
+        if(diskptr->block_arr[i] == NULL)
+            return NULL;
+    }
 
     return diskptr;
 }
