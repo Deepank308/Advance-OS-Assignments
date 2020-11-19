@@ -1,19 +1,20 @@
-#include "disk.h"
 #include "sfs.h"
 
-static uint32_t ceil(uint32_t a, uint32_t b)
+static mounted_fs fs = {.diskptr = NULL};
+
+static int ceil_int(int a, int b)
 {
     return (a + b - 1) / b;
 }
 
-static uint32_t min(uint32_t a, uint32_t b)
+static int min(int a, int b)
 {
     if (a < b)
         return a;
     return b;
 }
 
-static uint32_t max(uint32_t a, uint32_t b)
+static int max(int a, int b)
 {
     if (a > b)
         return a;
@@ -28,6 +29,70 @@ bool check_valid_inode(int inumber)
     return VALID;
 }
 
+
+void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx)
+{
+    int bmap_block_idx = bit_position / (8 * BLOCKSIZE);
+    int bit_offset = bit_position % (BLOCKSIZE * 8);
+
+    read_block(fs.diskptr, offset_block_idx + bmap_block_idx, fs.rblock);
+
+    int *bmap_block = (int *)fs.rblock;
+    int update_idx = bit_offset / 32;
+    int bit = (31 - update_idx) % 32;
+
+    bmap_block[update_idx] ^= (1 << bit);
+    bmap[bit_position / 32] ^= (1 << (31 - (bit_position % 32)));
+
+    write_block(fs.diskptr, offset_block_idx + bmap_block_idx, bmap_block);
+}
+
+int get_free_bmap_idx(uint32_t *bmap, uint32_t len_bmap, uint32_t bmap_offset)
+{
+    int idx = -1; // 0 based idx of the required bit from start of bmap
+    for (int i = 0; i < len_bmap; i++)
+    {
+        int mask = bmap[i];
+        int bit;
+        for (bit = 31; bit >= 0; bit--)
+        {
+            if (!(mask & (1 << bit)))
+            {
+                // free bit
+                // updates in flip_bit_in_bmap
+                // bmap[i] |= (1 << bit);
+                break;
+            }
+        }
+        if (bit != -1)
+        {
+            idx = i * 32 + (32 - bit) - 1;
+            break;
+        }
+    }
+
+    if (idx == -1)
+        return ERR;
+
+    // update bitmap
+    flip_bit_in_bmap(bmap, idx, bmap_offset);
+
+    return idx;
+}
+
+int get_inode_from_disk(int inode_idx, int *inode_block_idx, int *inode_num)
+{
+    *inode_block_idx = inode_idx / INODE_PER_BLOCK;
+    *inode_num = inode_idx % INODE_PER_BLOCK;
+
+    if (read_block(fs.diskptr, fs.sb.inode_block_idx + *inode_block_idx, fs.rblock) == ERR)
+    {
+        return ERR;
+    }
+
+    return SUCC;
+}
+
 int format(disk *diskptr)
 {
     if (diskptr == NULL)
@@ -39,12 +104,12 @@ int format(disk *diskptr)
 
     uint32_t num_inodes = I * INODE_PER_BLOCK;
     uint32_t len_inode_bitmaps = num_inodes;
-    uint32_t IB = ceil(num_inodes, BITS_PER_BYTES * BLOCKSIZE);
+    uint32_t IB = ceil_int(len_inode_bitmaps, BITS_PER_BYTES * BLOCKSIZE);
 
     // remaining blocks for data blocks and data bit maps
     uint32_t R = M - I - IB;
     uint32_t len_data_bitmaps = R;
-    uint32_t DBB = ceil(len_data_bitmaps, BITS_PER_BYTES * BLOCKSIZE);
+    uint32_t DBB = ceil_int(len_data_bitmaps, BITS_PER_BYTES * BLOCKSIZE);
     uint32_t DB = R - DBB;
     // NOTE: only consider the first DB number of bits of the data block bitmap.
 
@@ -121,6 +186,7 @@ void init_mounted_fs(super_block *sb, disk *diskptr)
 
 int mount(disk *diskptr)
 {
+
     // already mounted
     if (diskptr == NULL || fs.diskptr != NULL)
     {
@@ -139,69 +205,6 @@ int mount(disk *diskptr)
     }
 
     init_mounted_fs(&sb, diskptr);
-    return SUCC;
-}
-
-void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx)
-{
-    int bmap_block_idx = bit_position / (8 * BLOCKSIZE);
-    int bit_offset = bit_position % (BLOCKSIZE * 8);
-
-    read_block(fs.diskptr, offset_block_idx + bmap_block_idx, fs.rblock);
-
-    int *bmap_block = (uint32_t *)fs.rblock;
-    int update_idx = bit_offset / 32;
-    int bit = (31 - update_idx) % 32;
-
-    bmap_block[update_idx] ^= (1 << bit);
-    bmap[bit_position / 32] ^= (1 << (31 - (bit_position % 32)));
-
-    write_block(fs.diskptr, offset_block_idx + bmap_block_idx, bmap_block);
-}
-
-int get_free_bmap_idx(uint32_t *bmap, uint32_t len_bmap, uint32_t bmap_offset)
-{
-    int idx = -1; // 0 based idx of the required bit from start of bmap
-    for (int i = 0; i < len_bmap; i++)
-    {
-        int mask = bmap[i];
-        int bit;
-        for (bit = 31; bit >= 0; bit--)
-        {
-            if (!(mask & (1 << bit)))
-            {
-                // free bit
-                // updates in flip_bit_in_bmap
-                // bmap[i] |= (1 << bit);
-                break;
-            }
-        }
-        if (bit != -1)
-        {
-            idx = i * 32 + (32 - bit) - 1;
-            break;
-        }
-    }
-
-    if (idx == -1)
-        return ERR;
-
-    // update bitmap
-    flip_bit_in_bmap(bmap, idx, bmap_offset);
-
-    return idx;
-}
-
-int get_inode_from_disk(int inode_idx, int *inode_block_idx, int *inode_num)
-{
-    *inode_block_idx = inode_idx / INODE_PER_BLOCK;
-    *inode_num = inode_idx % INODE_PER_BLOCK;
-
-    if (read_block(fs.diskptr, fs.sb.inode_block_idx + *inode_block_idx, fs.rblock) == ERR)
-    {
-        return ERR;
-    }
-
     return SUCC;
 }
 
@@ -258,7 +261,7 @@ int remove_file(int inumber)
     flip_bit_in_bmap(fs.inode_bmap, inumber, fs.sb.inode_bitmap_block_idx);
 
     // update data bmaps
-    uint32_t cur_dblock = 0, num_dblocks = ceil(in.size, BLOCKSIZE);
+    uint32_t cur_dblock = 0, num_dblocks = ceil_int(in.size, BLOCKSIZE);
     uint32_t indirect_ptrs[PTRS_PER_BLOCK];
 
     bool indirect_ptrs_fetched = 0;
@@ -317,7 +320,7 @@ int stat(int inumber)
         return ERR;
     }
 
-    int num_dblocks = ceil(in.size, BLOCKSIZE);
+    int num_dblocks = ceil_int(in.size, BLOCKSIZE);
     int direct_ptrs = min(num_dblocks, 5);
     int indirect_ptrs = max(num_dblocks - 5, 0);
 
@@ -331,7 +334,7 @@ int stat(int inumber)
 }
 
 int read_i(int inumber, char *data, int length, int offset)
-{
+{   
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
@@ -354,14 +357,14 @@ int read_i(int inumber, char *data, int length, int offset)
 
     length = min(in.size, length + offset);
 
-    uint32_t cur_dblock = offset / BLOCKSIZE, num_dblocks = ceil(length, BLOCKSIZE);
+    uint32_t cur_dblock = offset / BLOCKSIZE, num_dblocks = ceil_int(length, BLOCKSIZE);
     uint32_t indirect_ptrs[PTRS_PER_BLOCK];
     bool indirect_ptrs_fetched = 0;
 
-    uint32_t data_offset = -1;
+    int data_offset = -1;
     while (cur_dblock < num_dblocks)
     {
-        uint32_t dblock = -1;
+        int dblock = -1;
 
         // direct pointers
         if (cur_dblock < 5)
@@ -400,7 +403,7 @@ int read_i(int inumber, char *data, int length, int offset)
         }
         else
         {
-            uint32_t copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
+            int copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
             strncpy(data + data_offset, data_block, copy_len);
             data_offset += copy_len;
         }
@@ -408,6 +411,7 @@ int read_i(int inumber, char *data, int length, int offset)
         cur_dblock++;
     }
 
+    // for(int i = 0; i < 10; i++) printf("%c\n", data[i]);
     return data_offset;
 }
 
@@ -435,17 +439,17 @@ int write_i(int inumber, char *data, int length, int offset)
 
     length += offset;
 
-    uint32_t cur_dblock = offset / BLOCKSIZE, num_dblocks = ceil(length, BLOCKSIZE);
+    uint32_t cur_dblock = offset / BLOCKSIZE, num_dblocks = ceil_int(length, BLOCKSIZE);
     uint32_t indirect_ptrs[PTRS_PER_BLOCK];
     bool indirect_ptrs_fetched = 0;
 
-    uint32_t data_offset = -1;
+    int data_offset = -1;
 
     bool indirect_ptrs_def = 0;
-    uint32_t file_dblocks = ceil(in.size, BLOCKSIZE); // number of dblocks pointers already in inode
+    uint32_t file_dblocks = ceil_int(in.size, BLOCKSIZE); // number of dblocks pointers already in inode
     while (cur_dblock < num_dblocks)
     {
-        uint32_t dblock = -1;
+        int dblock = -1;
         // overwrite
         if (cur_dblock < file_dblocks)
         {
@@ -548,7 +552,7 @@ int write_i(int inumber, char *data, int length, int offset)
 // format ---> /a/b/cat.meow
 char **parse_path(char *path, int *size)
 {
-    char **names;
+    char **names = (char **)malloc(MAX_DEPTH_ALLOWED * sizeof(char *));
     char *token;
     token = strtok(path, "/");
     while (token != NULL)
@@ -557,23 +561,27 @@ char **parse_path(char *path, int *size)
         strcpy(names[(*size)++], token);
         token = strtok(NULL, "/");
     }
+    
     return names;
 }
 
 dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
 {
-    uint32_t inode_block_idx, inode_num;
+    int inode_block_idx, inode_num;
     get_inode_from_disk(dir_inode, &inode_block_idx, &inode_num);
 
     inode in = ((inode *)fs.rblock)[inode_num];
     if (in.valid == INVALID)
-    {
-        return ERR;
+    { 
+        return NULL;
     }
 
     *num_dir_entry = in.size / sizeof(dir_entry);
     dir_entry *dir_entries = (dir_entry *)malloc((*num_dir_entry) * sizeof(dir_entry));
-    read_i(dir_inode, dir_entries, in.size, 0);
+    
+    char tmp[sizeof(dir_entries)];
+    read_i(dir_inode, tmp, in.size, 0);
+    memcpy(dir_entries, tmp, sizeof(tmp));
 
     return dir_entries;
 }
@@ -604,7 +612,7 @@ uint32_t walk_utils(uint32_t cur_dir_inode, char *next_dir)
 
 uint32_t get_parent_inode(char *path, char **base_name)
 {
-    uint32_t len_dir_names = 0;
+    int len_dir_names = 0;
     char **dir_names = parse_path(path, &len_dir_names);
 
     if (len_dir_names == 0)
@@ -671,7 +679,10 @@ int create_dir(char *dir_path)
 
     // write new dir entry at parent DB
     uint32_t write_offset = i * (sizeof(dir_entry));
-    if (write_i(parent_inode, &new_dir, sizeof(new_dir), write_offset) == ERR)
+
+    char tmp[sizeof(new_dir)];
+    memcpy(tmp, &new_dir, sizeof(new_dir));
+    if (write_i(parent_inode, tmp, sizeof(new_dir), write_offset) == ERR)
     {
         return ERR;
     }
@@ -725,7 +736,12 @@ int remove_dir(char *dir_path)
         return ERR;
     }
 
-    write_i(parent_inode, dir_entries, sizeof(dir_entries), 0);
+    char tmp[sizeof(dir_entries)];
+    memcpy(tmp, &dir_entries, sizeof(dir_entries));
+    if(write_i(parent_inode, tmp, sizeof(dir_entries), 0) == ERR){
+        free(dir_entries);
+        return ERR;
+    }
 
     free(dir_entries);
     return SUCC;
@@ -792,7 +808,7 @@ int write_file(char *filepath, char *data, int length, int offset)
             if (dir_entries[i].valid == INVALID)
             {
                 break;
-            }
+            } 
         }
         dir_entry new_file = (dir_entry){.valid = VALID, .type = FILE, .inumber = inumber};
         strcpy(new_file.name, base_name);
@@ -800,7 +816,10 @@ int write_file(char *filepath, char *data, int length, int offset)
 
         // write new file at parent DB
         uint32_t write_offset = i * (sizeof(dir_entry));
-        if (write_i(parent_inode, &new_file, sizeof(new_file), write_offset) == ERR)
+
+        char tmp[sizeof(new_file)];
+        memcpy(tmp, &new_file, sizeof(new_file));
+        if (write_i(parent_inode, tmp, sizeof(new_file), write_offset) == ERR)
         {
             free(dir_entries);
             return ERR;

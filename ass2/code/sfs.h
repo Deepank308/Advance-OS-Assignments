@@ -4,6 +4,8 @@
 #include<stdint.h>
 #include<string.h>
 
+#include "disk.h"
+
 #define DIR 0
 #define FILE 1
 #define BITS_PER_BYTES 8
@@ -11,6 +13,7 @@
 #define INODE_PER_BLOCK BLOCKSIZE / 32  // 128
 #define MAX_FILE PTRS_PER_BLOCK * 128
 #define MAX_FILENAME_LEN 22
+#define MAX_DEPTH_ALLOWED 32
 
 const static uint32_t MAGIC = 12345;
 
@@ -59,9 +62,6 @@ typedef struct mounted_fs {
 	disk* diskptr;
 	dir_entry* root_dir;
 } mounted_fs;
-
-
-static mounted_fs fs = {.diskptr = NULL};
 
 
 int format(disk *diskptr);

@@ -2,6 +2,7 @@
 #include<stdint.h>
 #include<stdbool.h>
 #include<stdlib.h>
+#include<string.h>
 
 #define ERR -1
 #define SUCC 0
