@@ -653,11 +653,10 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
         deserialize(dir_entries + i, tmp + i * sizeof(dir_entry));
     }
 
-    // return 0;
-    for (int i = 0; i < *num_dir_entry; i++)
-    {
-        // printf("name: %s\n", dir_entries[i].name);
+    for (int i = 0; i < *num_dir_entry; i++){
+        printf("name: %s\n", dir_entries[i].name);
     }
+    printf("\n");
 
     return dir_entries;
 }
@@ -671,17 +670,17 @@ uint32_t walk_utils(uint32_t cur_dir_inode, char *next_dir)
     int i;
     for (i = 0; i < num_dir_entry; i++)
     {
-        if (strcmp(dir_entries[i].name, next_dir) == 0)
+        if (strcmp(dir_entries[i].name, next_dir) == 0 && dir_entries[i].valid == VALID && dir_entries[i].type == DIR)
             break;
     }
     if (i == num_dir_entry)
     {
-        //dir not found
+        // dir not found
         free(dir_entries);
         return ERR;
     }
-    uint32_t inum = dir_entries[i].inumber;
 
+    uint32_t inum = dir_entries[i].inumber;
     free(dir_entries);
     return inum;
 }
@@ -700,15 +699,16 @@ uint32_t get_parent_inode(char *path, char **base_name)
     // base_name = dir_names[len_dir_names - 1];
 
     strcpy(*base_name, dir_names[len_dir_names - 1]);
-    int cur_dir_inode = 0; // root_inode
 
     // printf("len dir name %d\n", len_dir_names);
+    int cur_dir_inode = 0; // root_inode
     for (int i = 0; i < len_dir_names - 1; i++)
     {
         if ((cur_dir_inode = walk_utils(cur_dir_inode, dir_names[i])) == ERR)
         {
             return ERR;
         }
+        printf("current inode: %d\n", cur_dir_inode);
     }
 
     // printf("In get_parent_inode %d\n", cur_dir_inode);
@@ -774,13 +774,17 @@ int create_dir(char *dir_path)
 
 int remove_dir_utils(uint32_t parent_inode)
 {
+    printf("parent inode in remove utils: %d\n", parent_inode);
+
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
 
     for (int i = 0; i < num_dir_entry; i++)
     {
-        if (dir_entries[i].type == DIR)
-        {
+        if (dir_entries[i].valid == INVALID){
+            continue;
+        }
+        else if(dir_entries[i].type == DIR){
             remove_dir_utils(dir_entries[i].inumber);
         }
         remove_file(dir_entries[i].inumber);
@@ -796,6 +800,7 @@ int remove_dir(char *dir_path)
     char *base_name;
     uint32_t parent_inode = get_parent_inode(dir_path, &base_name);
     
+    printf("parent inode in remove: %d\n", parent_inode);
     // get parent directory list
     // parent file size
     uint32_t num_dir_entry;
@@ -804,10 +809,11 @@ int remove_dir(char *dir_path)
     int i;
     for (i = 0; i < num_dir_entry; i++)
     {
-        if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == DIR)
+        if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == DIR && dir_entries[i].valid == VALID)
         {
             remove_dir_utils(dir_entries[i].inumber);
             remove_file(dir_entries[i].inumber);
+
             dir_entries[i].valid = INVALID;
             break;
         }
@@ -818,15 +824,11 @@ int remove_dir(char *dir_path)
         return ERR;
     }
 
-    char tmp[num_dir_entry * sizeof(dir_entry)];
-    
-    for (int i = 0; i < num_dir_entry; i++)
-    {
-        serialize(dir_entries + i, tmp + (i * sizeof(dir_entry)));
-    }
+    char tmp[sizeof(dir_entry)];
+    serialize(dir_entries + i, tmp);
 
-    if (write_i(parent_inode, tmp, num_dir_entry * sizeof(dir_entry), 0) == ERR)
-    {
+    uint32_t write_offset = i * sizeof(dir_entry);
+    if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR){
         free(dir_entries);
         return ERR;
     }
@@ -838,7 +840,13 @@ int remove_dir(char *dir_path)
 int read_file(char *filepath, char *data, int length, int offset)
 {
     char *base_name;
-    uint32_t parent_inode = get_parent_inode(filepath, &base_name);
+    uint32_t parent_inode = 0;
+    if((parent_inode = get_parent_inode(filepath, &base_name)) == ERR){
+        // file path not found
+        return ERR;
+    }
+
+    printf("Parent inode:%d\n",parent_inode);
 
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);

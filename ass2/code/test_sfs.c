@@ -34,17 +34,64 @@ int main()
 
     assert(remove_file(inum) >= 0);
 
-    char buf[] = "/some";
-    char buf2[] = "/some/a";
-    assert(create_dir(buf) == 0 && printf("Create Dir\n"));
-    
-    // printf("Ret: %d\n", write_file(buf2, buf2, strlen(buf2), 0));
-    // printf("buffer size %d\n", strlen(buf2));
-    assert((write_file(buf2, buf2, strlen(buf2), 0) == strlen(buf2)) && printf("Write File \n"));
+    /*
 
-    assert(read_file(buf2, buf2, strlen(buf2), 0) == strlen(buf2) && printf("Read File \n"));
-    assert(remove_dir(buf) == 0 && printf("Remove Dir \n"));
+    /
+    /dir1
+    /dir2
+
+    /dir1/dir3/file1
+
+    /dir2/file2
+
+    */
+
+    char dir1[] = "/dir1";
+    char dir2[] = "/dir2";
+    char dir3[] = "/dir1/dir3";
+    char file1[] = "/dir1/dir3/file1";
+    char file2[] = "/dir2/file2";
+    char meow[] = "/dir1/dir3/file1/dir4";
+    
+    char read_data[100]= "\n";
+
+    printf("CREATING DIR 1...\n");
+    assert(create_dir(dir1) == 0 && printf("CREATE DIR 1\n"));
+
+    printf("CREATING DIR 2...\n");
+    assert(create_dir(dir2) == 0 && printf("CREATE DIR 2\n"));
+
+    printf("WRITING FILE 2...\n");
+    assert((write_file(file2, data, sizeof(data), 0) >= 0) && printf("WRITE FILE 1\n"));
+
+    printf("CREATING DIR FILE 2...\n");
+    assert(create_dir(file2) == 0 && printf("CREATE DIR FILE 2\n"));
+
+    printf("CREATING DIR 3...\n");
+    assert(create_dir(dir3) == 0 && printf("CREATE DIR 3\n"));
+
+    printf("WRITING FILE 1...\n");
+    assert((write_file(file1, data, sizeof(data), 0) >= 0) && printf("WRITE FILE 1\n"));
+
+    printf("WRITING FILE 1...\n");
+    assert((write_file(file1, data, sizeof(data), sizeof(data)) >= 0) && printf("WRITE FILE 1\n"));
+
+    printf("CREATING DIR 4...\n");
+    assert(create_dir(meow) == 0 && printf("CREATE DIR 4\n"));
+
+    printf("READING FILE 1...\n");
+    assert((read_file(file1, read_data, 2*sizeof(data), 0) >= 0) && printf("READ FILE 1\n"));
+    printf("FILE 1 DATA READ: %s\n", read_data);
+    
+    printf("REMOVING DIR 3...\n");
+    assert(remove_dir(dir3) == 0 && printf("REMOVE DIR 3\n"));
+    
+    printf("REMOVING DIR 2...\n");
+    assert(remove_dir(dir2) == 0 && printf("REMOVE DIR 2\n"));
+    
+    printf("REMOVING DIR 1...\n");
+    assert(remove_dir(dir1) == 0 && printf("REMOVE DIR 1\n"));
 
     free_disk(diskptr);
-    printf("Tests successful\n");
+    printf("TESTS SUCCESSFUL\n");
 }
