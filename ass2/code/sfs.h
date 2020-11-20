@@ -9,9 +9,9 @@
 #define DIR 0
 #define FILE 1
 #define BITS_PER_BYTES 8
-#define PTRS_PER_BLOCK BLOCKSIZE / 4    // 1024
-#define INODE_PER_BLOCK BLOCKSIZE / 32  // 128
-#define MAX_FILE PTRS_PER_BLOCK * 128
+#define PTRS_PER_BLOCK (BLOCKSIZE / 4)    // 1024
+#define INODE_PER_BLOCK (BLOCKSIZE / 32)  // 128
+#define MAX_FILE (PTRS_PER_BLOCK * 128)
 #define MAX_FILENAME_LEN 22
 #define MAX_DEPTH_ALLOWED 32
 
@@ -26,9 +26,11 @@ typedef struct inode {
 
 
 typedef struct dir_entry {
-	bool valid;
-	bool type;
+	int valid;
+	int type;
+
 	char name[MAX_FILENAME_LEN];
+	
 	uint32_t name_len;
 	uint32_t inumber;
 } dir_entry;

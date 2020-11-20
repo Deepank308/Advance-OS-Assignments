@@ -33,18 +33,16 @@ int main()
     	assert(data2[i] == data[i]);
     }   
 
-    assert(stat(inum) >= 0);
-
     assert(remove_file(inum) >= 0);
 
-    char buf[6] = "/some";
-    char buf2[6] = "/some";
+    char buf[] = "/some";
+    char buf2[] = "/some/a";
     assert(create_dir(buf) == 0 && printf("Create Dir\n"));
    
-    assert(write_file(buf, buf2, strlen(buf2), 0) == 0 && printf("Write File \n"));
+    assert(write_file(buf2, buf2, strlen(buf2), 0) == 0 && printf("Write File \n"));
     // return 0;
     
-    assert(read_file(buf, buf2, strlen(buf2), 0) == 0 && printf("Read file \n"));
+    assert(read_file(buf2, buf2, strlen(buf2), 0) == 0 && printf("Read file \n"));
     assert(remove_dir(buf) == 0 && printf("Remove Dir \n"));
 
     free_disk(diskptr);

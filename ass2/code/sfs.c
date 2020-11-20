@@ -66,15 +66,14 @@ void deserialize(dir_entry* dir_data, char *data){
     dir_data->inumber = *r;     r++;
 }
 
-
 void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx)
 {
     int bmap_block_idx = bit_position / (8 * BLOCKSIZE);
     int bit_offset = bit_position % (BLOCKSIZE * 8);
+    
+    int bmap_block[BLOCKSIZE];
+    read_block(fs.diskptr, offset_block_idx + bmap_block_idx, bmap_block);
 
-    read_block(fs.diskptr, offset_block_idx + bmap_block_idx, fs.rblock);
-
-    int *bmap_block = (int *)fs.rblock;
     int update_idx = bit_offset / 32;
     int bit = (31 - update_idx) % 32;
 
@@ -122,7 +121,7 @@ int get_inode_from_disk(int inode_idx, int *inode_block_idx, int *inode_num)
     *inode_block_idx = inode_idx / INODE_PER_BLOCK;
     *inode_num = inode_idx % INODE_PER_BLOCK;
 
-    if (read_block(fs.diskptr, fs.sb.inode_block_idx + *inode_block_idx, fs.rblock) == ERR)
+    if (read_block(fs.diskptr, fs.sb.inode_block_idx + (*inode_block_idx), fs.rblock) == ERR)
     {
         return ERR;
     }
@@ -219,6 +218,14 @@ void init_mounted_fs(super_block *sb, disk *diskptr)
     fs.root_dir = (dir_entry *)malloc(sizeof(dir_entry));
     *(fs.root_dir) = (dir_entry){.valid = VALID, .type = DIR, .name = "/", .name_len = 1, .inumber = 0};
     get_free_bmap_idx(fs.inode_bmap, fs.len_inode_bmap, fs.sb.inode_bitmap_block_idx);
+
+    inode temp[INODE_PER_BLOCK];
+
+    read_block(fs.diskptr, fs.sb.inode_block_idx, temp);
+    temp[0].size = 0;
+    temp[0].valid = VALID;
+
+    write_block(fs.diskptr, fs.sb.inode_block_idx, temp);
 }
 
 int mount(disk *diskptr)
@@ -260,6 +267,7 @@ int create_file()
         return ERR;
     }
 
+    printf("inode idx: %d\n", inode_num);
     inode *new_ptr;
     new_ptr = (inode *)fs.rblock; // typecasting in inode* type;
     new_ptr += inode_num;         // used for incrementing the blockptr to get to specific inode
@@ -269,6 +277,9 @@ int create_file()
     if (write_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, fs.rblock) == ERR) // writing back updates block into disk
         return ERR;
 
+    inode inode_blk[INODE_PER_BLOCK];
+    read_block(fs.diskptr, fs.sb.inode_block_idx + inode_block_idx, inode_blk);
+    printf("inode number %d, %d\n", inode_blk[0].valid, inode_blk[inode_num].valid);
     return inode_idx;
 }
 
@@ -367,6 +378,7 @@ int stat(int inumber)
 
     printf("\n[inode %d stats]:\n", inumber);
     printf("Logical size: %d\n", in.size);
+    printf("Valid: %d\n", in.valid);
     printf("Number of data blocks in use: %d\n", num_dblocks);
     printf("Number of direct pointers used: %d\n", direct_ptrs);
     printf("Number of indirect pointers used: %d\n", indirect_ptrs);
@@ -440,12 +452,12 @@ int read_i(int inumber, char *data, int length, int offset)
         if (data_offset == -1)
         {
             data_offset = min((cur_dblock + 1) * BLOCKSIZE, length) - offset;
-            strncpy(data, data_block + (offset - cur_dblock * BLOCKSIZE), data_offset);
+            memcpy(data, data_block + (offset - cur_dblock * BLOCKSIZE), data_offset);
         }
         else
         {
             int copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
-            strncpy(data + data_offset, data_block, copy_len);
+            memcpy(data + data_offset, data_block, copy_len);
             data_offset += copy_len;
         }
 
@@ -487,6 +499,7 @@ int write_i(int inumber, char *data, int length, int offset)
 
     bool indirect_ptrs_def = 0;
     uint32_t file_dblocks = ceil_int(in.size, BLOCKSIZE); // number of dblocks pointers already in inode
+
     while (cur_dblock < num_dblocks)
     {
         int dblock = -1;
@@ -553,13 +566,13 @@ int write_i(int inumber, char *data, int length, int offset)
         if (data_offset == -1)
         {
             data_offset = min((cur_dblock + 1) * BLOCKSIZE, length) - offset;
-            strncpy(data_block + (offset - cur_dblock * BLOCKSIZE), data, data_offset);
+            memcpy(data_block + (offset - cur_dblock * BLOCKSIZE), data, data_offset);
         }
         // other blocks(writing prefix)
         else
         {
             uint32_t copy_len = min(length - cur_dblock * BLOCKSIZE, BLOCKSIZE);
-            strncpy(data_block, data + data_offset, copy_len);
+            memcpy(data_block, data + data_offset, copy_len);
             data_offset += copy_len;
         }
 
@@ -586,11 +599,11 @@ int write_i(int inumber, char *data, int length, int offset)
     {
         return ERR;
     }
+
     return data_offset;
 }
 
-// format ---> /a/b/cat.meow
-char **parse_path(char *path, int *size)
+char** parse_path(char *path, int *size)
 {
     char **names = (char **)malloc(MAX_DEPTH_ALLOWED * sizeof(char *));
     char *token;
@@ -609,14 +622,18 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
 {
     int inode_block_idx, inode_num;
     get_inode_from_disk(dir_inode, &inode_block_idx, &inode_num);
+    printf("Dir entry size: %d, %d, %d\n", dir_inode, inode_block_idx, inode_num);
+    
     inode in = ((inode *)fs.rblock)[inode_num];
     
+    printf("entries: %d\n", in.valid);
     if (in.valid == INVALID)
     { 
         return NULL;
     }
-
+    
     *num_dir_entry = in.size / sizeof(dir_entry);
+
     dir_entry *dir_entries = (dir_entry *)malloc((*num_dir_entry) * sizeof(dir_entry));
     
     char tmp[in.size];
@@ -628,7 +645,7 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
         deserialize(dir_entries + i, tmp + i * sizeof(dir_entry));
     }
 
-    printf("entries: %d\n", *num_dir_entry);
+    // return 0;
     for(int i = 0; i < *num_dir_entry; i++){
         printf("name: %s\n", dir_entries[i].name);
     }
@@ -674,6 +691,8 @@ uint32_t get_parent_inode(char *path, char **base_name)
 
     strcpy(*base_name, dir_names[len_dir_names - 1]);
     int cur_dir_inode = 0; // root_inode
+
+    // printf("len dir name %d\n", len_dir_names);
     for (int i = 0; i < len_dir_names - 1; i++)
     {
         if ((cur_dir_inode = walk_utils(cur_dir_inode, dir_names[i])) == ERR)
@@ -682,6 +701,7 @@ uint32_t get_parent_inode(char *path, char **base_name)
         }
     }
 
+    printf("In get_parent_inode %d\n", cur_dir_inode);
     for (int i = 0; i < len_dir_names; i++)
         free(dir_names[i]);
 
@@ -690,8 +710,6 @@ uint32_t get_parent_inode(char *path, char **base_name)
 
 int create_dir(char *dir_path)
 {
-    struct dir_entry new_dir;
-
     char *base_name;
     uint32_t parent_inode;
     if ((parent_inode = get_parent_inode(dir_path, &base_name)) == ERR)
@@ -699,6 +717,7 @@ int create_dir(char *dir_path)
         return ERR;
     }
 
+    dir_entry new_dir;
     new_dir.valid = VALID;
     new_dir.type = DIR;
 
@@ -831,10 +850,12 @@ int read_file(char *filepath, char *data, int length, int offset)
 
 int write_file(char *filepath, char *data, int length, int offset)
 {
+    printf("In write_file %s\n", filepath);
     char *base_name;
     uint32_t parent_inode = get_parent_inode(filepath, &base_name);
 
     uint32_t num_dir_entry;
+    printf("In get_dirblock %d\n", parent_inode);
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
 
     int inumber = -1;
@@ -847,6 +868,7 @@ int write_file(char *filepath, char *data, int length, int offset)
         }
     }
 
+    // printf("inumber: %d\n", inumber);
     // create new file
     if (inumber == -1)
     {
@@ -863,7 +885,7 @@ int write_file(char *filepath, char *data, int length, int offset)
             if (dir_entries[i].valid == INVALID)
             {
                 break;
-            } 
+            }
         }
         dir_entry new_file = (dir_entry){.valid = VALID, .type = FILE, .inumber = inumber};
         strcpy(new_file.name, base_name);
