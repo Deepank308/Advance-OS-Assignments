@@ -29,6 +29,43 @@ bool check_valid_inode(int inumber)
     return VALID;
 }
 
+void serialize(dir_entry* dir_data, char *data)
+{
+    int *q = (int*)data;    
+    *q = dir_data->valid;       q++;    
+    *q = dir_data->type;        q++;    
+    
+    char *p = (char*)q;
+    int i = 0;
+    while (i < MAX_FILENAME_LEN)
+    {
+        *p = dir_data->name[i];
+        p++;
+        i++;
+    }
+    uint32_t *r = (uint32_t *)p;
+    *r = dir_data->name_len;    r++;
+    *r = dir_data->inumber;     r++;
+}
+
+void deserialize(dir_entry* dir_data, char *data){
+    int *q = (int *)data;
+    dir_data->valid = *q;       q++;
+    dir_data->type = *q;        q++;
+
+    char *p = (char *)q;
+    int i = 0;
+    while (i < MAX_FILENAME_LEN)
+    {
+        dir_data->name[i] = *p;
+        p++;
+        i++;
+    }
+    uint32_t *r = (uint32_t *)p;
+    dir_data->name_len = *r;    r++;
+    dir_data->inumber = *r;     r++;
+}
+
 
 void flip_bit_in_bmap(uint32_t *bmap, uint32_t bit_position, uint32_t offset_block_idx)
 {
@@ -415,7 +452,6 @@ int read_i(int inumber, char *data, int length, int offset)
         cur_dblock++;
     }
 
-    // for(int i = 0; i < 10; i++) printf("%c\n", data[i]);
     return data_offset;
 }
 
@@ -583,15 +619,15 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
     *num_dir_entry = in.size / sizeof(dir_entry);
     dir_entry *dir_entries = (dir_entry *)malloc((*num_dir_entry) * sizeof(dir_entry));
     
-    char *tmp = (char *)malloc(in.size);
-    printf("%d, %d\n", dir_inode, in.size);
-
+    char tmp[in.size];
     if(read_i(dir_inode, tmp, in.size, 0) == ERR){
         free(dir_entries);
         return NULL;
     }
-    memcpy(dir_entries, tmp, sizeof(tmp));
-    
+    for(int i = 0; i < *num_dir_entry; i++){
+        deserialize(dir_entries + i, tmp + i * sizeof(dir_entry));
+    }
+
     printf("entries: %d\n", *num_dir_entry);
     for(int i = 0; i < *num_dir_entry; i++){
         printf("name: %s\n", dir_entries[i].name);
@@ -697,31 +733,15 @@ int create_dir(char *dir_path)
     // write new dir entry at parent DB
     uint32_t write_offset = i * (sizeof(dir_entry));
 
-    char *tmp = (char *)malloc(sizeof(new_dir));
-    memcpy(tmp, &new_dir, sizeof(new_dir));
-
-    // char tmp[sizeof(dir_entries)];
-    // struct_to_char(tmp, new_dir);
-    printf("\nTemp: %s %d\n", tmp, sizeof(tmp));
-    if (write_i(parent_inode, tmp, sizeof(new_dir), write_offset) == ERR)
+    char tmp[sizeof(dir_entry)];
+    serialize(&new_dir, tmp);
+    if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR)
     {
         return ERR;
     }
 
     return SUCC;
 }
-// void struct_to_char(char *dest, dir_entry dir_data){
-//     dest=custom_memcpy(dest, dir_data.valid, sizeof(dir_data.valid));
-//     dest=custom_memcpy(dest, dir_data.type, sizeof(dir_data.type));
-//     dest=custom_memcpy(dest, dir_data.name, sizeof(dir_data.name));
-//     dest=custom_memcpy(dest, dir_data.name_len, sizeof(dir_data.name_len));
-//     dest=custom_memcpy(dest, dir_data.inumber, sizeof(dir_data.inumber));
-// }
-// char* custom_memcpy(char *dest, char* src, uint32_t size){
-//     memcpy(dest, src, size);
-//     return(dest+size);
-// }
-
 
 int remove_dir_utils(uint32_t parent_inode)
 {
@@ -770,9 +790,9 @@ int remove_dir(char *dir_path)
     }
 
     char tmp[sizeof(dir_entries)];
-    memcpy(tmp, &dir_entries, sizeof(dir_entries));
-
-    
+    for(int i = 0; i < num_dir_entry; i++){
+        serialize(dir_entries + i, tmp + i * sizeof(dir_entry));
+    }
     if(write_i(parent_inode, tmp, sizeof(dir_entries), 0) == ERR){
         free(dir_entries);
         return ERR;
@@ -816,8 +836,6 @@ int write_file(char *filepath, char *data, int length, int offset)
 
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
-    return 0;
-    return 0;
 
     int inumber = -1;
     for (int i = 0; i < num_dir_entry; i++)
@@ -854,9 +872,9 @@ int write_file(char *filepath, char *data, int length, int offset)
         // write new file at parent DB
         uint32_t write_offset = i * (sizeof(dir_entry));
 
-        char tmp[sizeof(new_file)];
-        memcpy(tmp, &new_file, sizeof(new_file));
-        if (write_i(parent_inode, tmp, sizeof(new_file), write_offset) == ERR)
+        char tmp[sizeof(dir_entry)];
+        serialize(&new_file, tmp);
+        if(write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR)
         {
             free(dir_entries);
             return ERR;
