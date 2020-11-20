@@ -31,8 +31,9 @@ int main()
     
     assert(diskptr->size == nbytes);
     assert(diskptr->reads == 2 && diskptr->writes == 1 && diskptr->blocks == 100);
-    printf("%s", buff);
-   
+    // printf("%s", buff);
+    // return 0;
+
     assert(strcmp(buff, buff2) == 0);
     assert(free_disk(diskptr) == 0);
 

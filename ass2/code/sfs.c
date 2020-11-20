@@ -194,11 +194,13 @@ int mount(disk *diskptr)
     }
 
     super_block sb;
-    if (read_block(diskptr, 0, &sb) == ERR)
+    char buf[BLOCKSIZE];
+    if (read_block(diskptr, 0, buf) == ERR)
     {
         return ERR;
     }
 
+    memcpy(&sb, buf, sizeof(sb));
     if (sb.magic_number != MAGIC)
     {
         return ERR;
@@ -265,9 +267,11 @@ int remove_file(int inumber)
     uint32_t indirect_ptrs[PTRS_PER_BLOCK];
 
     bool indirect_ptrs_fetched = 0;
+
+    
     while (cur_dblock < num_dblocks)
     {
-        uint32_t dblock = -1;
+        int dblock = -1;
 
         // direct pointers
         if (cur_dblock < 5)
@@ -569,8 +573,8 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
 {
     int inode_block_idx, inode_num;
     get_inode_from_disk(dir_inode, &inode_block_idx, &inode_num);
-
     inode in = ((inode *)fs.rblock)[inode_num];
+    
     if (in.valid == INVALID)
     { 
         return NULL;
@@ -579,10 +583,20 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry)
     *num_dir_entry = in.size / sizeof(dir_entry);
     dir_entry *dir_entries = (dir_entry *)malloc((*num_dir_entry) * sizeof(dir_entry));
     
-    char tmp[sizeof(dir_entries)];
-    read_i(dir_inode, tmp, in.size, 0);
-    memcpy(dir_entries, tmp, sizeof(tmp));
+    char *tmp = (char *)malloc(in.size);
+    printf("%d, %d\n", dir_inode, in.size);
 
+    if(read_i(dir_inode, tmp, in.size, 0) == ERR){
+        free(dir_entries);
+        return NULL;
+    }
+    memcpy(dir_entries, tmp, sizeof(tmp));
+    
+    printf("entries: %d\n", *num_dir_entry);
+    for(int i = 0; i < *num_dir_entry; i++){
+        printf("name: %s\n", dir_entries[i].name);
+    }
+    
     return dir_entries;
 }
 
@@ -619,10 +633,11 @@ uint32_t get_parent_inode(char *path, char **base_name)
     {
         return ERR;
     }
+    *base_name = (char *)malloc(strlen(dir_names[len_dir_names-1]) * sizeof(char));
+    // base_name = dir_names[len_dir_names - 1];
 
-    *base_name = dir_names[len_dir_names - 1];
-
-    int cur_dir_inode = 0; //root_inode
+    strcpy(*base_name, dir_names[len_dir_names - 1]);
+    int cur_dir_inode = 0; // root_inode
     for (int i = 0; i < len_dir_names - 1; i++)
     {
         if ((cur_dir_inode = walk_utils(cur_dir_inode, dir_names[i])) == ERR)
@@ -650,7 +665,8 @@ int create_dir(char *dir_path)
 
     new_dir.valid = VALID;
     new_dir.type = DIR;
-    strcpy(new_dir.name, base_name);
+
+    strcpy(new_dir.name, base_name);    
     new_dir.name_len = strlen(base_name);
 
     // dir already exists!
@@ -667,6 +683,7 @@ int create_dir(char *dir_path)
     // parent file size
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+    
     int i;
     for (i = 0; i < num_dir_entry; i++)
     {
@@ -680,14 +697,20 @@ int create_dir(char *dir_path)
     // write new dir entry at parent DB
     uint32_t write_offset = i * (sizeof(dir_entry));
 
-    char tmp[sizeof(new_dir)];
+    char *tmp = (char *)malloc(sizeof(new_dir));
     memcpy(tmp, &new_dir, sizeof(new_dir));
+
+    printf("\nTemp: %s %d\n", tmp, sizeof(tmp));
     if (write_i(parent_inode, tmp, sizeof(new_dir), write_offset) == ERR)
     {
         return ERR;
     }
 
     return SUCC;
+}
+
+char * custom_memcpy(char *dest, dir_entry dir_data){
+    memcpy(dest, dir_data.valid, sizeof(dir_data.valid));
 }
 
 int remove_dir_utils(uint32_t parent_inode)
@@ -781,8 +804,10 @@ int write_file(char *filepath, char *data, int length, int offset)
 
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+    return 0;
+    return 0;
 
-    uint32_t inumber = -1;
+    int inumber = -1;
     for (int i = 0; i < num_dir_entry; i++)
     {
         if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == FILE)

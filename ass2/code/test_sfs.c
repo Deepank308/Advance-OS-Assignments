@@ -34,16 +34,18 @@ int main()
     }   
 
     assert(stat(inum) >= 0);
-    return 0;
 
     assert(remove_file(inum) >= 0);
 
     char buf[6] = "/some";
     char buf2[6] = "/some";
-    assert(create_dir(buf) == 0);
-    assert(write_file(buf, buf2, strlen(buf2), 0) == 0);
-    assert(read_file(buf, buf2, strlen(buf2), 0) == 0);
-    assert(remove_dir(buf) == 0);
+    assert(create_dir(buf) == 0 && printf("Create Dir\n"));
+   
+    assert(write_file(buf, buf2, strlen(buf2), 0) == 0 && printf("Write File \n"));
+    return 0;
+    
+    assert(read_file(buf, buf2, strlen(buf2), 0) == 0 && printf("Read file \n"));
+    assert(remove_dir(buf) == 0 && printf("Remove Dir \n"));
 
     free_disk(diskptr);
     printf("Tests successful\n");

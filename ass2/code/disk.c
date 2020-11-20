@@ -52,10 +52,9 @@ int read_block(disk *diskptr, int blocknr, void *block_data)
         return ERR;
     }
 
-    memcpy(block_data, diskptr->block_arr[blocknr], sizeof(*block_data));
+    memcpy(block_data, diskptr->block_arr[blocknr], BLOCKSIZE);
     diskptr->reads++;
 
-    // printf("readchec\n");
     return SUCC;
 }
 
@@ -66,7 +65,7 @@ int write_block(disk *diskptr, int blocknr, void *block_data)
         return ERR;
     }
 
-    memcpy(diskptr->block_arr[blocknr], block_data, sizeof(*block_data));
+    memcpy(diskptr->block_arr[blocknr], block_data, BLOCKSIZE);
     diskptr->writes++;
 
     return SUCC;

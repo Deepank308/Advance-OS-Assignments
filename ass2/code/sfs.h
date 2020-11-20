@@ -26,8 +26,8 @@ typedef struct inode {
 
 
 typedef struct dir_entry {
-	unsigned int valid : 1;
-	unsigned int type : 1;		
+	bool valid;
+	bool type;
 	char name[MAX_FILENAME_LEN];
 	uint32_t name_len;
 	uint32_t inumber;
