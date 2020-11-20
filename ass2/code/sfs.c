@@ -700,6 +700,8 @@ int create_dir(char *dir_path)
     char *tmp = (char *)malloc(sizeof(new_dir));
     memcpy(tmp, &new_dir, sizeof(new_dir));
 
+    // char tmp[sizeof(dir_entries)];
+    // struct_to_char(tmp, new_dir);
     printf("\nTemp: %s %d\n", tmp, sizeof(tmp));
     if (write_i(parent_inode, tmp, sizeof(new_dir), write_offset) == ERR)
     {
@@ -708,10 +710,18 @@ int create_dir(char *dir_path)
 
     return SUCC;
 }
+// void struct_to_char(char *dest, dir_entry dir_data){
+//     dest=custom_memcpy(dest, dir_data.valid, sizeof(dir_data.valid));
+//     dest=custom_memcpy(dest, dir_data.type, sizeof(dir_data.type));
+//     dest=custom_memcpy(dest, dir_data.name, sizeof(dir_data.name));
+//     dest=custom_memcpy(dest, dir_data.name_len, sizeof(dir_data.name_len));
+//     dest=custom_memcpy(dest, dir_data.inumber, sizeof(dir_data.inumber));
+// }
+// char* custom_memcpy(char *dest, char* src, uint32_t size){
+//     memcpy(dest, src, size);
+//     return(dest+size);
+// }
 
-char * custom_memcpy(char *dest, dir_entry dir_data){
-    memcpy(dest, dir_data.valid, sizeof(dir_data.valid));
-}
 
 int remove_dir_utils(uint32_t parent_inode)
 {
@@ -761,6 +771,8 @@ int remove_dir(char *dir_path)
 
     char tmp[sizeof(dir_entries)];
     memcpy(tmp, &dir_entries, sizeof(dir_entries));
+
+    
     if(write_i(parent_inode, tmp, sizeof(dir_entries), 0) == ERR){
         free(dir_entries);
         return ERR;
