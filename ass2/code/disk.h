@@ -21,6 +21,8 @@ typedef struct disk {
 } disk;
 
 
+void disk_stat(disk *diskptr);
+
 disk *create_disk(int nbytes);
 
 int read_block(disk *diskptr, int blocknr, void *block_data);

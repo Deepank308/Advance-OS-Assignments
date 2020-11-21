@@ -185,7 +185,7 @@ int format(disk *diskptr){
     return SUCC;
 }
 
-void init_mounted_fs(super_block *sb, disk *diskptr){
+int init_mounted_fs(super_block *sb, disk *diskptr){
     fs.sb = *sb;
     fs.diskptr = diskptr;
 
@@ -205,10 +205,16 @@ void init_mounted_fs(super_block *sb, disk *diskptr){
     get_free_bmap_idx(fs.inode_bmap, fs.len_inode_bmap, fs.sb.inode_bitmap_block_idx);
 
     inode temp[INODE_PER_BLOCK];
-    read_block(fs.diskptr, fs.sb.inode_block_idx, temp);
+    if (read_block(fs.diskptr, fs.sb.inode_block_idx, temp) == ERR){
+        return ERR;
+    }
     temp[0].size = 0;
     temp[0].valid = VALID;
-    write_block(fs.diskptr, fs.sb.inode_block_idx, temp);
+    if (write_block(fs.diskptr, fs.sb.inode_block_idx, temp) == ERR){
+        return ERR;
+    }
+
+    return SUCC;
 }
 
 int mount(disk *diskptr){
@@ -228,8 +234,7 @@ int mount(disk *diskptr){
         return ERR;
     }
 
-    init_mounted_fs(&sb, diskptr);
-    return SUCC;
+    return init_mounted_fs(&sb, diskptr);
 }
 
 int create_file(){
@@ -435,7 +440,7 @@ int write_i(int inumber, char *data, int length, int offset){
         // if not mounted
         return ERR;
     }
-    
+
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
@@ -566,7 +571,11 @@ char **parse_path(char *path, int *size){
 
 dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry){
     int inode_block_idx, inode_num;
-    get_inode_from_disk(dir_inode, &inode_block_idx, &inode_num);
+    *num_dir_entry = 0;
+
+    if (get_inode_from_disk(dir_inode, &inode_block_idx, &inode_num) == ERR){
+        return NULL;
+    }
 
     inode in = ((inode *)fs.rblock)[inode_num];
     if (in.valid == INVALID){
@@ -696,10 +705,14 @@ int remove_dir_utils(uint32_t parent_inode){
             continue;
         }
         else if (dir_entries[i].type == DIR){
-            remove_dir_utils(dir_entries[i].inumber);
+            if (remove_dir_utils(dir_entries[i].inumber) == ERR){
+                return ERR;
+            }
         }
 
-        remove_file(dir_entries[i].inumber);
+        if (remove_file(dir_entries[i].inumber) == ERR){
+            return ERR;
+        }
         dir_entries[i].valid = INVALID;
     }
 
@@ -709,7 +722,10 @@ int remove_dir_utils(uint32_t parent_inode){
 
 int remove_dir(char *dir_path){
     char *base_name;
-    uint32_t parent_inode = get_parent_inode(dir_path, &base_name);
+    uint32_t parent_inode;
+    if ((parent_inode = get_parent_inode(dir_path, &base_name)) == ERR){
+        return ERR;
+    }
     
     // get parent directory list
     // parent file size
@@ -719,8 +735,12 @@ int remove_dir(char *dir_path){
     int i;
     for (i = 0; i < num_dir_entry; i++){
         if (dir_entries[i].valid == VALID && dir_entries[i].type == DIR && strcmp(dir_entries[i].name, base_name) == 0){
-            remove_dir_utils(dir_entries[i].inumber);
-            remove_file(dir_entries[i].inumber);
+            if (remove_dir_utils(dir_entries[i].inumber) == ERR){
+                return ERR;
+            }
+            if (remove_file(dir_entries[i].inumber) == ERR){
+                return ERR;
+            }
 
             dir_entries[i].valid = INVALID;
             break;
@@ -754,6 +774,9 @@ int read_file(char *filepath, char *data, int length, int offset){
 
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
+    if (dir_entries == NULL){
+        return ERR;
+    }
 
     int inumber = -1;
     for (int i = 0; i < num_dir_entry; i++){
@@ -768,6 +791,7 @@ int read_file(char *filepath, char *data, int length, int offset){
         return ERR;
     }
 
+    printf("read file here %d, %d, %d\n", inumber, length, offset);
     return read_i(inumber, data, length, offset);
 }
 

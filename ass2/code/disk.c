@@ -1,5 +1,14 @@
 #include "disk.h"
 
+void disk_stat(disk *diskptr){
+    if(diskptr == NULL) return;
+
+    printf("Disk stats\n");
+    printf("No. of blocks: %d\n", diskptr->blocks);
+    printf("No. of reads: %d\n", diskptr->reads);
+    printf("No. of writes: %d\n", diskptr->writes);
+}
+
 bool check_valid_blockptr(disk *diskptr, int blocknr)
 {
     if (diskptr == NULL)
