@@ -1,3 +1,9 @@
+/*
+Deepank Agrawal 17CS30011
+Praagy Rastogi 17CS30026
+Kirti Agarwal 20CS60R14
+*/
+
 #include "sfs.h"
 
 static mounted_fs fs = {.diskptr = NULL};
@@ -335,8 +341,9 @@ int stat(int inumber){
         return ERR;
     }
 
-    if (check_valid_inode(inumber) == INVALID)
+    if (check_valid_inode(inumber) == INVALID){
         return ERR;
+    }
 
     int inode_block_idx, inode_num;
     if (get_inode_from_disk(inumber, &inode_block_idx, &inode_num) == ERR){
@@ -345,6 +352,7 @@ int stat(int inumber){
 
     inode in = ((inode *)fs.rblock)[inode_num];
     if (in.valid == INVALID){
+        printf("\n[inode %d stats]: INVALID\n", inumber);
         return ERR;
     }
 
@@ -357,7 +365,7 @@ int stat(int inumber){
     printf("Valid: %d\n", in.valid);
     printf("Number of data blocks in use: %d\n", num_dblocks);
     printf("Number of direct pointers used: %d\n", direct_ptrs);
-    printf("Number of indirect pointers used: %d\n", indirect_ptrs);
+    printf("Number of indirect pointers used: %d\n\n", indirect_ptrs);
 
     return SUCC;
 }
@@ -566,6 +574,7 @@ char **parse_path(char *path, int *size){
         token = strtok(NULL, "/");
     }
 
+    free(path1);
     return names;
 }
 
@@ -706,11 +715,13 @@ int remove_dir_utils(uint32_t parent_inode){
         }
         else if (dir_entries[i].type == DIR){
             if (remove_dir_utils(dir_entries[i].inumber) == ERR){
+                free(dir_entries);
                 return ERR;
             }
         }
 
         if (remove_file(dir_entries[i].inumber) == ERR){
+            free(dir_entries);
             return ERR;
         }
         dir_entries[i].valid = INVALID;
@@ -736,9 +747,13 @@ int remove_dir(char *dir_path){
     for (i = 0; i < num_dir_entry; i++){
         if (dir_entries[i].valid == VALID && dir_entries[i].type == DIR && strcmp(dir_entries[i].name, base_name) == 0){
             if (remove_dir_utils(dir_entries[i].inumber) == ERR){
+                free(dir_entries);
+                free(base_name);
                 return ERR;
             }
             if (remove_file(dir_entries[i].inumber) == ERR){
+                free(dir_entries);
+                free(base_name);
                 return ERR;
             }
 
@@ -748,6 +763,7 @@ int remove_dir(char *dir_path){
     }
     if (i == num_dir_entry){
         free(dir_entries);
+        free(base_name);
         return ERR;
     }
 
@@ -757,9 +773,11 @@ int remove_dir(char *dir_path){
     uint32_t write_offset = i * sizeof(dir_entry);
     if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR){
         free(dir_entries);
+        free(base_name);
         return ERR;
     }
 
+    free(base_name);
     free(dir_entries);
     return SUCC;
 }
@@ -775,6 +793,7 @@ int read_file(char *filepath, char *data, int length, int offset){
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(parent_inode, &num_dir_entry);
     if (dir_entries == NULL){
+        free(base_name);
         return ERR;
     }
 
@@ -785,13 +804,13 @@ int read_file(char *filepath, char *data, int length, int offset){
             break;
         }
     }
+    free(base_name);
     free(dir_entries);
 
     if (inumber == -1 || check_valid_inode(inumber) == INVALID){
         return ERR;
     }
 
-    printf("read file here %d, %d, %d\n", inumber, length, offset);
     return read_i(inumber, data, length, offset);
 }
 
@@ -808,6 +827,7 @@ int write_file(char *filepath, char *data, int length, int offset){
             if(dir_entries[i].type == DIR){
                 // a dir exists with same name
                 free(dir_entries);
+                free(base_name);
                 return ERR;
             }
             inumber = dir_entries[i].inumber;
@@ -820,6 +840,7 @@ int write_file(char *filepath, char *data, int length, int offset){
     if (inumber == -1){
         if ((inumber = create_file()) == ERR){
             free(dir_entries);
+            free(base_name);
             return ERR;
         }
 
@@ -842,14 +863,17 @@ int write_file(char *filepath, char *data, int length, int offset){
         serialize_dir_entry(&new_file, tmp);
         if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR){
             free(dir_entries);
+            free(base_name);
             return ERR;
         }
     }
     else if (check_valid_inode(inumber) == INVALID){
         free(dir_entries);
+        free(base_name);
         return ERR;
     }
 
+    free(base_name);
     free(dir_entries);
     return write_i(inumber, data, length, offset);
 }

@@ -1,3 +1,9 @@
+/*
+Deepank Agrawal 17CS30011
+Praagy Rastogi 17CS30026
+Kirti Agarwal 20CS60R14
+*/
+
 #include<stdio.h>
 #include<stdint.h>
 #include<stdbool.h>
