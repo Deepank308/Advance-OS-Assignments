@@ -233,6 +233,11 @@ int mount(disk *diskptr){
 }
 
 int create_file(){
+    if(fs.diskptr == NULL){
+        // if not mounted
+        return ERR;
+    }
+
     int inode_idx = get_free_bmap_idx(fs.inode_bmap, fs.len_inode_bmap, fs.sb.inode_bitmap_block_idx);
     if (inode_idx == ERR)
         return ERR;
@@ -256,6 +261,11 @@ int create_file(){
 }
 
 int remove_file(int inumber){
+    if(fs.diskptr == NULL){
+        // if not mounted
+        return ERR;
+    }
+
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
@@ -315,6 +325,11 @@ int remove_file(int inumber){
 }
 
 int stat(int inumber){
+    if(fs.diskptr == NULL){
+        // if not mounted
+        return ERR;
+    }
+
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
@@ -343,6 +358,11 @@ int stat(int inumber){
 }
 
 int read_i(int inumber, char *data, int length, int offset){
+    if(fs.diskptr == NULL){
+        // if not mounted
+        return ERR;
+    }
+
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
@@ -411,6 +431,11 @@ int read_i(int inumber, char *data, int length, int offset){
 }
 
 int write_i(int inumber, char *data, int length, int offset){
+    if(fs.diskptr == NULL){
+        // if not mounted
+        return ERR;
+    }
+    
     if (check_valid_inode(inumber) == INVALID)
         return ERR;
 
@@ -630,6 +655,9 @@ int create_dir(char *dir_path){
     if (walk_utils(parent_inode, new_dir.name, DIR) != ERR){
         return ERR;
     }
+    if (walk_utils(parent_inode, new_dir.name, FILE) != ERR){
+        return ERR;
+    }
 
     if ((new_dir.inumber = create_file()) == ERR){
         return ERR;
@@ -752,10 +780,16 @@ int write_file(char *filepath, char *data, int length, int offset){
 
     int inumber = -1;
     for (int i = 0; i < num_dir_entry; i++){
-        if (dir_entries[i].valid == VALID && dir_entries[i].type == FILE && strcmp(dir_entries[i].name, base_name) == 0){
+        if (dir_entries[i].valid == VALID && strcmp(dir_entries[i].name, base_name) == 0){
+            if(dir_entries[i].type == DIR){
+                // a dir exists with same name
+                free(dir_entries);
+                return ERR;
+            }
             inumber = dir_entries[i].inumber;
             break;
         }
+
     }
 
     // create new file
