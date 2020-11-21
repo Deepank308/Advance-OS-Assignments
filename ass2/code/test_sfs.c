@@ -13,7 +13,6 @@ int main()
 
     int inum = create_file();
     assert(inum == 1);
-    // assert(stat(inum) >= 0);
 
     int off = 0, i;
     char data[10];
@@ -27,7 +26,6 @@ int main()
     ret = read_i(inum, data2, 10, off);
     assert(ret == 10);
 
-    // for(int i = 0; i < 10; i++) printf("%c\n", data2[i]);
     for (i = 0; i < 10; i++){
     	assert(data2[i] == data[i]);
     }   
@@ -35,7 +33,8 @@ int main()
     assert(remove_file(inum) >= 0);
 
     /*
-
+    Directory structure
+    
     /
     /dir1
     /dir2
@@ -51,7 +50,6 @@ int main()
     char dir3[] = "/dir1/dir3";
     char file1[] = "/dir1/dir3/file1";
     char file2[] = "/dir2/file2";
-    char meow[] = "/dir1/dir3/file1/dir4";
     
     char read_data[100]= "\n";
 
@@ -64,9 +62,6 @@ int main()
     printf("WRITING FILE 2...\n");
     assert((write_file(file2, data, sizeof(data), 0) >= 0) && printf("WRITE FILE 1\n"));
 
-    printf("CREATING DIR FILE 2...\n");
-    assert(create_dir(file2) == 0 && printf("CREATE DIR FILE 2\n"));
-
     printf("CREATING DIR 3...\n");
     assert(create_dir(dir3) == 0 && printf("CREATE DIR 3\n"));
 
@@ -75,9 +70,6 @@ int main()
 
     printf("WRITING FILE 1...\n");
     assert((write_file(file1, data, sizeof(data), sizeof(data)) >= 0) && printf("WRITE FILE 1\n"));
-
-    printf("CREATING DIR 4...\n");
-    assert(create_dir(meow) == 0 && printf("CREATE DIR 4\n"));
 
     printf("READING FILE 1...\n");
     assert((read_file(file1, read_data, 2*sizeof(data), 0) >= 0) && printf("READ FILE 1\n"));

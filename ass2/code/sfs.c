@@ -25,7 +25,7 @@ bool check_valid_inode(int inumber){
     return VALID;
 }
 
-void serialize(dir_entry *dir_data, char *data){
+void serialize_dir_entry(dir_entry *dir_data, char *data){
     int *q = (int *)data;
     *q = dir_data->valid;
     q++;
@@ -47,7 +47,7 @@ void serialize(dir_entry *dir_data, char *data){
     r++;
 }
 
-void deserialize(dir_entry *dir_data, char *data){
+void deserialize_dir_entry(dir_entry *dir_data, char *data){
     int *q = (int *)data;
     dir_data->valid = *q;
     q++;
@@ -558,24 +558,25 @@ dir_entry *get_dirblock(uint32_t dir_inode, uint32_t *num_dir_entry){
     }
     
     for (int i = 0; i < *num_dir_entry; i++){
-        deserialize(dir_entries + i, tmp + i * sizeof(dir_entry));
+        deserialize_dir_entry(dir_entries + i, tmp + i * sizeof(dir_entry));
     }
 
     return dir_entries;
 }
 
-// return inumber of the next_dir
-uint32_t walk_utils(uint32_t cur_dir_inode, char *next_dir){
+// return inumber of the next_dir_entry
+// if does not exist, return err
+uint32_t walk_utils(uint32_t cur_dir_inode, char *next_dir_entry, uint32_t dir_entry_type){
     uint32_t num_dir_entry;
     dir_entry *dir_entries = get_dirblock(cur_dir_inode, &num_dir_entry);
 
     int i;
     for (i = 0; i < num_dir_entry; i++){
-        if (strcmp(dir_entries[i].name, next_dir) == 0 && dir_entries[i].valid == VALID && dir_entries[i].type == DIR)
+        if (dir_entries[i].valid == VALID && dir_entries[i].type == dir_entry_type && strcmp(dir_entries[i].name, next_dir_entry) == 0)
             break;
     }
     if (i == num_dir_entry){
-        // dir not found
+        // dir_entry not found
         free(dir_entries);
         return ERR;
     }
@@ -588,7 +589,6 @@ uint32_t walk_utils(uint32_t cur_dir_inode, char *next_dir){
 uint32_t get_parent_inode(char *path, char **base_name){
     int len_dir_names = 0;
     char **dir_names = parse_path(path, &len_dir_names);
-    printf("path name %s\n", path);
 
     if (len_dir_names == 0){
         return ERR;
@@ -596,12 +596,12 @@ uint32_t get_parent_inode(char *path, char **base_name){
     *base_name = (char *)malloc(strlen(dir_names[len_dir_names - 1]) * sizeof(char));
     strcpy(*base_name, dir_names[len_dir_names - 1]);
 
+    // walk through the directory structure, assuming internal nodes to be DIR
     int cur_dir_inode = 0; // root_inode
     for (int i = 0; i < len_dir_names - 1; i++){
-        if ((cur_dir_inode = walk_utils(cur_dir_inode, dir_names[i])) == ERR){
+        if ((cur_dir_inode = walk_utils(cur_dir_inode, dir_names[i], DIR)) == ERR){
             return ERR;
         }
-        printf("current inode: %d\n", cur_dir_inode);
     }
 
     for (int i = 0; i < len_dir_names; i++)
@@ -623,9 +623,11 @@ int create_dir(char *dir_path){
 
     strcpy(new_dir.name, base_name);
     new_dir.name_len = strlen(base_name);
+    free(base_name);
 
     // dir already exists!
-    if (walk_utils(parent_inode, base_name) != ERR){
+    // TODO: Also apply to files
+    if (walk_utils(parent_inode, new_dir.name, DIR) != ERR){
         return ERR;
     }
 
@@ -649,7 +651,7 @@ int create_dir(char *dir_path){
     uint32_t write_offset = i * (sizeof(dir_entry));
 
     char tmp[sizeof(dir_entry)];
-    serialize(&new_dir, tmp);
+    serialize_dir_entry(&new_dir, tmp);
     if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR){
         return ERR;
     }
@@ -665,9 +667,10 @@ int remove_dir_utils(uint32_t parent_inode){
         if (dir_entries[i].valid == INVALID){
             continue;
         }
-        else if(dir_entries[i].type == DIR){
+        else if (dir_entries[i].type == DIR){
             remove_dir_utils(dir_entries[i].inumber);
         }
+
         remove_file(dir_entries[i].inumber);
         dir_entries[i].valid = INVALID;
     }
@@ -687,7 +690,7 @@ int remove_dir(char *dir_path){
 
     int i;
     for (i = 0; i < num_dir_entry; i++){
-        if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == DIR && dir_entries[i].valid == VALID){
+        if (dir_entries[i].valid == VALID && dir_entries[i].type == DIR && strcmp(dir_entries[i].name, base_name) == 0){
             remove_dir_utils(dir_entries[i].inumber);
             remove_file(dir_entries[i].inumber);
 
@@ -701,7 +704,7 @@ int remove_dir(char *dir_path){
     }
 
     char tmp[sizeof(dir_entry)];
-    serialize(dir_entries + i, tmp);
+    serialize_dir_entry(dir_entries + i, tmp);
 
     uint32_t write_offset = i * sizeof(dir_entry);
     if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR){
@@ -716,7 +719,7 @@ int remove_dir(char *dir_path){
 int read_file(char *filepath, char *data, int length, int offset){
     char *base_name;
     uint32_t parent_inode = 0;
-    if((parent_inode = get_parent_inode(filepath, &base_name)) == ERR){
+    if ((parent_inode = get_parent_inode(filepath, &base_name)) == ERR){
         // file path not found
         return ERR;
     }
@@ -726,7 +729,7 @@ int read_file(char *filepath, char *data, int length, int offset){
 
     int inumber = -1;
     for (int i = 0; i < num_dir_entry; i++){
-        if (strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == FILE){
+        if (dir_entries[i].valid == VALID && dir_entries[i].type == FILE && strcmp(dir_entries[i].name, base_name) == 0){
             inumber = dir_entries[i].inumber;
             break;
         }
@@ -749,7 +752,7 @@ int write_file(char *filepath, char *data, int length, int offset){
 
     int inumber = -1;
     for (int i = 0; i < num_dir_entry; i++){
-        if (dir_entries[i].valid == VALID && strcmp(dir_entries[i].name, base_name) == 0 && dir_entries[i].type == FILE){
+        if (dir_entries[i].valid == VALID && dir_entries[i].type == FILE && strcmp(dir_entries[i].name, base_name) == 0){
             inumber = dir_entries[i].inumber;
             break;
         }
@@ -769,6 +772,7 @@ int write_file(char *filepath, char *data, int length, int offset){
                 break;
             }
         }
+
         dir_entry new_file = (dir_entry){.valid = VALID, .type = FILE, .inumber = inumber};
         strcpy(new_file.name, base_name);
         new_file.name_len = strlen(base_name);
@@ -777,7 +781,7 @@ int write_file(char *filepath, char *data, int length, int offset){
         uint32_t write_offset = i * (sizeof(dir_entry));
 
         char tmp[sizeof(dir_entry)];
-        serialize(&new_file, tmp);
+        serialize_dir_entry(&new_file, tmp);
         if (write_i(parent_inode, tmp, sizeof(dir_entry), write_offset) == ERR){
             free(dir_entries);
             return ERR;
